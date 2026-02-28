@@ -42,6 +42,38 @@ body {
   background: #334155 !important;
 }
 
+/* Layer control styling */
+.leaflet-control-layers {
+  background: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 8px !important;
+  color: #f1f5f9 !important;
+}
+
+.leaflet-control-layers-expanded {
+  padding: 8px 12px !important;
+}
+
+.leaflet-control-layers-toggle {
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.leaflet-control-layers-separator {
+  border-top-color: #334155 !important;
+}
+
+.leaflet-control-layers label {
+  color: #f1f5f9 !important;
+  padding: 4px 0;
+}
+
+.leaflet-control-layers-selector {
+  margin-right: 8px;
+}
+
 /* Flight category colors */
 .flt-vfr { color: var(--vfr); }
 .flt-mvfr { color: var(--mvfr); }

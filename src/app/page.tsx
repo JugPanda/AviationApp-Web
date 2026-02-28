@@ -7,12 +7,30 @@ import AirportInfo from '@/components/AirportInfo';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor } from '@/lib/utils';
 
+const FLIGHT_CATEGORIES = ['VFR', 'MVFR', 'IFR', 'LIFR'] as const;
+
 export default function Home() {
   const [airports, setAirports] = useState<MetarData[]>([]);
   const [selectedAirport, setSelectedAirport] = useState<MetarData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  
+  // Filter state - all categories visible by default
+  const [filters, setFilters] = useState<Record<string, boolean>>({
+    VFR: true,
+    MVFR: true,
+    IFR: true,
+    LIFR: true,
+    Unknown: true,
+  });
+
+  const toggleFilter = (category: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
+  };
 
   const fetchAirports = useCallback(async (ids?: string, isSearch = false) => {
     setIsLoading(true);
@@ -87,6 +105,12 @@ export default function Home() {
     return acc;
   }, {} as Record<string, number>);
 
+  // Count visible airports
+  const visibleCount = airports.filter(a => {
+    const cat = a.fltCat || 'Unknown';
+    return filters[cat] !== false;
+  }).length;
+
   return (
     <main className="h-screen flex flex-col">
       {/* Header */}
@@ -129,18 +153,31 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Category summary */}
-          <div className="flex gap-4 mt-4 text-sm">
-            {(['VFR', 'MVFR', 'IFR', 'LIFR'] as const).map(cat => (
-              <div key={cat} className="flex items-center gap-1.5">
+          {/* Category filters */}
+          <div className="flex flex-wrap items-center gap-4 mt-4 text-sm">
+            <span className="text-slate-400 text-xs">Filter:</span>
+            {FLIGHT_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => toggleFilter(cat)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all ${
+                  filters[cat] 
+                    ? 'bg-slate-800 hover:bg-slate-700' 
+                    : 'bg-slate-800/30 opacity-50 hover:opacity-75'
+                }`}
+                title={`${filters[cat] ? 'Hide' : 'Show'} ${cat} airports`}
+              >
                 <span 
-                  className="w-3 h-3 rounded-full"
+                  className={`w-3 h-3 rounded-full transition-opacity ${filters[cat] ? '' : 'opacity-30'}`}
                   style={{ backgroundColor: getFlightCategoryColor(cat) }}
                 />
                 <span className="font-medium">{cat}</span>
                 <span className="text-slate-500">({categoryCounts[cat] || 0})</span>
-              </div>
+              </button>
             ))}
+            <span className="text-slate-500 text-xs ml-auto hidden sm:block">
+              Showing {visibleCount} of {airports.length} airports
+            </span>
           </div>
         </div>
       </header>
@@ -160,7 +197,15 @@ export default function Home() {
             airports={airports} 
             selectedAirport={selectedAirport}
             onAirportSelect={setSelectedAirport}
+            filters={filters}
           />
+          
+          {/* Map layer hint */}
+          <div className="absolute bottom-4 left-4 bg-slate-900/90 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-slate-400 pointer-events-none">
+            <span className="hidden sm:inline">💡 Use the layer control (top-right) for </span>
+            <span className="sm:hidden">💡 </span>
+            VFR Sectional & IFR charts
+          </div>
         </div>
 
         {/* Sidebar */}

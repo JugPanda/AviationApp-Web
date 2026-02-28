@@ -22,8 +22,9 @@ interface MapWrapperProps {
   airports: MetarData[];
   selectedAirport: MetarData | null;
   onAirportSelect: (airport: MetarData) => void;
+  filters: Record<string, boolean>;
 }
 
-export default function MapWrapper({ airports, selectedAirport, onAirportSelect }: MapWrapperProps) {
-  return <AirportMap airports={airports} selectedAirport={selectedAirport} onAirportSelect={onAirportSelect} />;
+export default function MapWrapper({ airports, selectedAirport, onAirportSelect, filters }: MapWrapperProps) {
+  return <AirportMap airports={airports} selectedAirport={selectedAirport} onAirportSelect={onAirportSelect} filters={filters} />;
 }
