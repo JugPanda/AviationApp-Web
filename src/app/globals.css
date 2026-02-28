@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --vfr: #22c55e;
+  --mvfr: #3b82f6;
+  --ifr: #ef4444;
+  --lifr: #a855f7;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+/* Leaflet overrides for dark theme */
+.leaflet-container {
+  background: #1e293b;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #1e293b;
+  color: #f1f5f9;
+  border-radius: 8px;
+}
+
+.leaflet-popup-tip {
+  background: #1e293b;
+}
+
+.leaflet-control-zoom a {
+  background: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: #334155 !important;
+}
+
+/* Flight category colors */
+.flt-vfr { color: var(--vfr); }
+.flt-mvfr { color: var(--mvfr); }
+.flt-ifr { color: var(--ifr); }
+.flt-lifr { color: var(--lifr); }
+
+.bg-vfr { background-color: var(--vfr); }
+.bg-mvfr { background-color: var(--mvfr); }
+.bg-ifr { background-color: var(--ifr); }
+.bg-lifr { background-color: var(--lifr); }
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
