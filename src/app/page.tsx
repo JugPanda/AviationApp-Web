@@ -14,7 +14,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const fetchAirports = useCallback(async (ids?: string) => {
+  const fetchAirports = useCallback(async (ids?: string, isSearch = false) => {
     setIsLoading(true);
     setError(null);
     
@@ -23,18 +23,23 @@ export default function Home() {
       const res = await fetch(url);
       
       if (!res.ok) {
-        throw new Error('Failed to fetch weather data');
+        throw new Error(`Failed to fetch weather data (${res.status})`);
       }
       
       const data = await res.json();
       
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
       if (Array.isArray(data) && data.length > 0) {
-        if (ids && ids.split(',').length === 1) {
-          // Single airport search - add to existing if not already there
-          const existing = airports.find(a => a.icaoId === data[0].icaoId);
-          if (!existing) {
-            setAirports(prev => [...prev, ...data]);
-          }
+        if (isSearch) {
+          // Single airport search - add to existing and select
+          setAirports(prev => {
+            const exists = prev.find(a => a.icaoId === data[0].icaoId);
+            if (exists) return prev;
+            return [...prev, ...data];
+          });
           setSelectedAirport(data[0]);
         } else {
           setAirports(data);
@@ -44,40 +49,35 @@ export default function Home() {
         setError(`No data found for ${ids}`);
       }
     } catch (err) {
+      console.error('Fetch error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
     }
-  }, [airports]);
+  }, []);
 
   // Initial load
   useEffect(() => {
     fetchAirports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
-      if (airports.length > 0) {
-        const ids = airports.map(a => a.icaoId).join(',');
-        fetchAirports(ids);
-      }
+      // Refresh current data
+      fetchAirports();
     }, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [airports, fetchAirports]);
+  }, [fetchAirports]);
 
   const handleSearch = (icao: string) => {
-    fetchAirports(icao);
+    fetchAirports(icao, true);
   };
 
   const handleRefresh = () => {
-    if (airports.length > 0) {
-      const ids = airports.map(a => a.icaoId).join(',');
-      fetchAirports(ids);
-    } else {
-      fetchAirports();
-    }
+    fetchAirports();
   };
 
   // Count airports by category
