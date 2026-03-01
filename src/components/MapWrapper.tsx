@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { MetarData } from '@/types';
+import { ErrorBoundary } from './ErrorBoundary';
 
 const AirportMap = dynamic(() => import('./AirportMap'), {
   ssr: false,
@@ -26,5 +27,14 @@ interface MapWrapperProps {
 }
 
 export default function MapWrapper({ airports, selectedAirport, onAirportSelect, filters }: MapWrapperProps) {
-  return <AirportMap airports={airports} selectedAirport={selectedAirport} onAirportSelect={onAirportSelect} filters={filters} />;
+  return (
+    <ErrorBoundary>
+      <AirportMap 
+        airports={airports} 
+        selectedAirport={selectedAirport} 
+        onAirportSelect={onAirportSelect} 
+        filters={filters} 
+      />
+    </ErrorBoundary>
+  );
 }
