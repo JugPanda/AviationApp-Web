@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, memo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, LayersControl } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature, formatAltimeter, formatObsTime } from '@/lib/utils';
 import 'leaflet/dist/leaflet.css';
@@ -41,6 +40,11 @@ const AirportMarker = memo(function AirportMarker({
   isSelected: boolean; 
   onSelect: () => void;
 }) {
+  // Skip if invalid coordinates
+  if (!airport.lat || !airport.lon || isNaN(airport.lat) || isNaN(airport.lon)) {
+    return null;
+  }
+
   return (
     <CircleMarker
       center={[airport.lat, airport.lon]}
@@ -152,17 +156,18 @@ export default function AirportMap({
   center = [39.8283, -98.5795], // Center of US
   zoom = 4 
 }: AirportMapProps) {
-  // Memoize filtered airports
+  // Memoize filtered airports with coordinate validation
   const filteredAirports = useMemo(() => 
     airports.filter(airport => {
+      // Validate coordinates
+      if (!airport.lat || !airport.lon || isNaN(airport.lat) || isNaN(airport.lon)) {
+        return false;
+      }
       const category = airport.fltCat || 'Unknown';
       return filters[category] !== false;
     }), 
     [airports, filters]
   );
-
-  // Use clustering when there are many airports
-  const useCluster = filteredAirports.length > 30;
 
   const markers = useMemo(() => 
     filteredAirports.map((airport) => (
@@ -247,18 +252,7 @@ export default function AirportMap({
 
       <MapController selectedAirport={selectedAirport} />
       
-      {useCluster ? (
-        <MarkerClusterGroup
-          chunkedLoading
-          maxClusterRadius={50}
-          spiderfyOnMaxZoom
-          showCoverageOnHover={false}
-        >
-          {markers}
-        </MarkerClusterGroup>
-      ) : (
-        markers
-      )}
+      {markers}
     </MapContainer>
   );
 }
