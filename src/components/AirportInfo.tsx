@@ -3,7 +3,6 @@
 import { MetarData } from '@/types';
 import { 
   getFlightCategoryColor, 
-  getFlightCategoryTextClass,
   formatVisibility, 
   formatWind, 
   formatTemperature, 
@@ -20,21 +19,23 @@ interface AirportInfoProps {
 export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   if (!airport) return null;
 
+  const fltCat = airport.fltCat ?? null;
+
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-slate-700 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold">{airport.icaoId}</h2>
+            <h2 className="text-2xl font-bold">{airport.icaoId || 'Unknown'}</h2>
             <span 
               className="px-3 py-1 rounded-full text-white text-sm font-bold"
-              style={{ backgroundColor: getFlightCategoryColor(airport.fltCat) }}
+              style={{ backgroundColor: getFlightCategoryColor(fltCat) }}
             >
-              {airport.fltCat || 'N/A'}
+              {fltCat || 'N/A'}
             </span>
           </div>
-          <p className="text-slate-400 mt-1">{airport.name}</p>
+          <p className="text-slate-400 mt-1">{airport.name || 'Unknown Airport'}</p>
         </div>
         <button
           onClick={onClose}
@@ -53,7 +54,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         <InfoItem label="Temperature" value={formatTemperature(airport.temp)} />
         <InfoItem 
           label="Dewpoint" 
-          value={airport.dewp !== null ? `${Math.round(airport.dewp)}°C` : '--'} 
+          value={airport.dewp != null ? `${Math.round(airport.dewp)}°C` : '--'} 
         />
         <InfoItem label="Altimeter" value={formatAltimeter(airport.altim)} />
         <InfoItem label="Observed" value={formatObsTime(airport.obsTime)} />
@@ -69,7 +70,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
                 key={i}
                 className="px-2 py-1 bg-slate-700 rounded text-sm"
               >
-                {cloud.cover} @ {cloud.base.toLocaleString()} ft
+                {cloud.cover} @ {cloud.base?.toLocaleString() ?? '--'} ft
               </span>
             ))}
           </div>
@@ -77,21 +78,23 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
       )}
 
       {/* Raw METAR */}
-      <div className="p-4 border-t border-slate-700">
-        <h3 className="text-sm text-slate-400 mb-2">Raw METAR</h3>
-        <pre className="text-xs bg-slate-900 p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
-          {airport.rawOb}
-        </pre>
-      </div>
+      {airport.rawOb && (
+        <div className="p-4 border-t border-slate-700">
+          <h3 className="text-sm text-slate-400 mb-2">Raw METAR</h3>
+          <pre className="text-xs bg-slate-900 p-3 rounded overflow-x-auto whitespace-pre-wrap break-all">
+            {airport.rawOb}
+          </pre>
+        </div>
+      )}
 
       {/* Flight Category Legend */}
       <div className="p-4 border-t border-slate-700">
         <h3 className="text-sm text-slate-400 mb-2">Flight Categories</h3>
         <div className="flex flex-wrap gap-3 text-xs">
-          <LegendItem color="bg-vfr" label="VFR" desc="&gt;3000ft, &gt;5SM" />
+          <LegendItem color="bg-vfr" label="VFR" desc=">3000ft, >5SM" />
           <LegendItem color="bg-mvfr" label="MVFR" desc="1000-3000ft, 3-5SM" />
           <LegendItem color="bg-ifr" label="IFR" desc="500-1000ft, 1-3SM" />
-          <LegendItem color="bg-lifr" label="LIFR" desc="&lt;500ft, &lt;1SM" />
+          <LegendItem color="bg-lifr" label="LIFR" desc="<500ft, <1SM" />
         </div>
       </div>
     </div>
