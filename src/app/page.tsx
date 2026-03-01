@@ -259,7 +259,7 @@ export default function Home() {
                           className="rounded border-slate-600"
                         />
                         <span>{code}</span>
-                        <span className="text-slate-500 text-xs">({state.airports.length})</span>
+                        <span className="text-slate-500 text-xs">{state.name}</span>
                       </label>
                     ))}
                   </div>
