@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, memo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, LayersControl } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature, formatAltimeter, formatObsTime } from '@/lib/utils';
 import 'leaflet/dist/leaflet.css';
@@ -15,7 +16,8 @@ interface AirportMapProps {
   zoom?: number;
 }
 
-function MapController({ selectedAirport }: { selectedAirport: MetarData | null }) {
+// Memoized controller to prevent unnecessary re-renders
+const MapController = memo(function MapController({ selectedAirport }: { selectedAirport: MetarData | null }) {
   const map = useMap();
   
   useEffect(() => {
@@ -27,7 +29,71 @@ function MapController({ selectedAirport }: { selectedAirport: MetarData | null 
   }, [selectedAirport, map]);
 
   return null;
-}
+});
+
+// Memoized airport marker
+const AirportMarker = memo(function AirportMarker({ 
+  airport, 
+  isSelected, 
+  onSelect 
+}: { 
+  airport: MetarData; 
+  isSelected: boolean; 
+  onSelect: () => void;
+}) {
+  return (
+    <CircleMarker
+      center={[airport.lat, airport.lon]}
+      radius={isSelected ? 12 : 8}
+      pathOptions={{
+        fillColor: getFlightCategoryColor(airport.fltCat),
+        fillOpacity: 0.9,
+        color: isSelected ? '#fff' : getFlightCategoryColor(airport.fltCat),
+        weight: isSelected ? 3 : 2,
+      }}
+      eventHandlers={{
+        click: onSelect,
+      }}
+    >
+      <Popup>
+        <div className="min-w-[200px]">
+          <div className="font-bold text-lg">{airport.icaoId}</div>
+          <div className="text-sm text-gray-400 mb-2">{airport.name}</div>
+          
+          <div 
+            className="inline-block px-2 py-1 rounded text-white text-sm font-bold mb-2"
+            style={{ backgroundColor: getFlightCategoryColor(airport.fltCat) }}
+          >
+            {airport.fltCat || 'N/A'}
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <span className="text-gray-400">Visibility:</span>
+              <br />{formatVisibility(airport.visib)}
+            </div>
+            <div>
+              <span className="text-gray-400">Wind:</span>
+              <br />{formatWind(airport.wdir, airport.wspd, airport.wgst)}
+            </div>
+            <div>
+              <span className="text-gray-400">Temp:</span>
+              <br />{formatTemperature(airport.temp)}
+            </div>
+            <div>
+              <span className="text-gray-400">Altimeter:</span>
+              <br />{formatAltimeter(airport.altim)}
+            </div>
+          </div>
+          
+          <div className="mt-2 text-xs text-gray-500">
+            Observed: {formatObsTime(airport.obsTime)}
+          </div>
+        </div>
+      </Popup>
+    </CircleMarker>
+  );
+});
 
 // Map layer definitions
 const MAP_LAYERS = {
@@ -86,11 +152,29 @@ export default function AirportMap({
   center = [39.8283, -98.5795], // Center of US
   zoom = 4 
 }: AirportMapProps) {
-  // Filter airports based on flight category
-  const filteredAirports = airports.filter(airport => {
-    const category = airport.fltCat || 'Unknown';
-    return filters[category] !== false; // Show if not explicitly filtered out
-  });
+  // Memoize filtered airports
+  const filteredAirports = useMemo(() => 
+    airports.filter(airport => {
+      const category = airport.fltCat || 'Unknown';
+      return filters[category] !== false;
+    }), 
+    [airports, filters]
+  );
+
+  // Use clustering when there are many airports
+  const useCluster = filteredAirports.length > 30;
+
+  const markers = useMemo(() => 
+    filteredAirports.map((airport) => (
+      <AirportMarker
+        key={airport.icaoId}
+        airport={airport}
+        isSelected={selectedAirport?.icaoId === airport.icaoId}
+        onSelect={() => onAirportSelect(airport)}
+      />
+    )),
+    [filteredAirports, selectedAirport, onAirportSelect]
+  );
 
   return (
     <MapContainer
@@ -163,59 +247,18 @@ export default function AirportMap({
 
       <MapController selectedAirport={selectedAirport} />
       
-      {filteredAirports.map((airport) => (
-        <CircleMarker
-          key={airport.icaoId}
-          center={[airport.lat, airport.lon]}
-          radius={selectedAirport?.icaoId === airport.icaoId ? 12 : 8}
-          pathOptions={{
-            fillColor: getFlightCategoryColor(airport.fltCat),
-            fillOpacity: 0.9,
-            color: selectedAirport?.icaoId === airport.icaoId ? '#fff' : getFlightCategoryColor(airport.fltCat),
-            weight: selectedAirport?.icaoId === airport.icaoId ? 3 : 2,
-          }}
-          eventHandlers={{
-            click: () => onAirportSelect(airport),
-          }}
+      {useCluster ? (
+        <MarkerClusterGroup
+          chunkedLoading
+          maxClusterRadius={50}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
         >
-          <Popup>
-            <div className="min-w-[200px]">
-              <div className="font-bold text-lg">{airport.icaoId}</div>
-              <div className="text-sm text-gray-400 mb-2">{airport.name}</div>
-              
-              <div 
-                className="inline-block px-2 py-1 rounded text-white text-sm font-bold mb-2"
-                style={{ backgroundColor: getFlightCategoryColor(airport.fltCat) }}
-              >
-                {airport.fltCat || 'N/A'}
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-gray-400">Visibility:</span>
-                  <br />{formatVisibility(airport.visib)}
-                </div>
-                <div>
-                  <span className="text-gray-400">Wind:</span>
-                  <br />{formatWind(airport.wdir, airport.wspd, airport.wgst)}
-                </div>
-                <div>
-                  <span className="text-gray-400">Temp:</span>
-                  <br />{formatTemperature(airport.temp)}
-                </div>
-                <div>
-                  <span className="text-gray-400">Altimeter:</span>
-                  <br />{formatAltimeter(airport.altim)}
-                </div>
-              </div>
-              
-              <div className="mt-2 text-xs text-gray-500">
-                Observed: {formatObsTime(airport.obsTime)}
-              </div>
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
+          {markers}
+        </MarkerClusterGroup>
+      ) : (
+        markers
+      )}
     </MapContainer>
   );
 }

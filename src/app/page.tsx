@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import MapWrapper from '@/components/MapWrapper';
 import SearchBar from '@/components/SearchBar';
 import AirportInfo from '@/components/AirportInfo';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor } from '@/lib/utils';
+import { US_STATES, US_REGIONS } from '@/lib/airports';
 
 const FLIGHT_CATEGORIES = ['VFR', 'MVFR', 'IFR', 'LIFR'] as const;
 
@@ -16,7 +17,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
-  // Filter state - all categories visible by default
+  // Location filters
+  const [selectedRegion, setSelectedRegion] = useState<string>('');
+  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+  
+  // Flight category filters
   const [filters, setFilters] = useState<Record<string, boolean>>({
     VFR: true,
     MVFR: true,
@@ -37,7 +43,16 @@ export default function Home() {
     setError(null);
     
     try {
-      const url = ids ? `/api/metar?ids=${ids}` : '/api/metar';
+      let url = '/api/metar';
+      
+      if (ids) {
+        url = `/api/metar?ids=${ids}`;
+      } else if (selectedStates.length > 0) {
+        url = `/api/metar?states=${selectedStates.join(',')}`;
+      } else if (selectedRegion) {
+        url = `/api/metar?region=${selectedRegion}`;
+      }
+      
       const res = await fetch(url);
       
       if (!res.ok) {
@@ -52,7 +67,6 @@ export default function Home() {
       
       if (Array.isArray(data) && data.length > 0) {
         if (isSearch) {
-          // Single airport search - add to existing and select
           setAirports(prev => {
             const exists = prev.find(a => a.icaoId === data[0].icaoId);
             if (exists) return prev;
@@ -72,18 +86,16 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedStates, selectedRegion]);
 
-  // Initial load
+  // Fetch when filters change
   useEffect(() => {
     fetchAirports();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedStates, selectedRegion, fetchAirports]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
-      // Refresh current data
       fetchAirports();
     }, 5 * 60 * 1000);
 
@@ -98,18 +110,50 @@ export default function Home() {
     fetchAirports();
   };
 
+  const handleRegionChange = (region: string) => {
+    setSelectedRegion(region);
+    setSelectedStates([]); // Clear states when region changes
+  };
+
+  const handleStateToggle = (stateCode: string) => {
+    setSelectedStates(prev => 
+      prev.includes(stateCode)
+        ? prev.filter(s => s !== stateCode)
+        : [...prev, stateCode]
+    );
+    setSelectedRegion(''); // Clear region when states are manually selected
+  };
+
+  const clearLocationFilters = () => {
+    setSelectedRegion('');
+    setSelectedStates([]);
+  };
+
   // Count airports by category
-  const categoryCounts = airports.reduce((acc, a) => {
-    const cat = a.fltCat || 'Unknown';
-    acc[cat] = (acc[cat] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const categoryCounts = useMemo(() => 
+    airports.reduce((acc, a) => {
+      const cat = a.fltCat || 'Unknown';
+      acc[cat] = (acc[cat] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>),
+    [airports]
+  );
 
   // Count visible airports
-  const visibleCount = airports.filter(a => {
-    const cat = a.fltCat || 'Unknown';
-    return filters[cat] !== false;
-  }).length;
+  const visibleCount = useMemo(() => 
+    airports.filter(a => {
+      const cat = a.fltCat || 'Unknown';
+      return filters[cat] !== false;
+    }).length,
+    [airports, filters]
+  );
+
+  // States sorted alphabetically
+  const sortedStates = useMemo(() => 
+    Object.entries(US_STATES)
+      .sort((a, b) => a[1].name.localeCompare(b[1].name)),
+    []
+  );
 
   return (
     <main className="h-screen flex flex-col">
@@ -153,9 +197,92 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Category filters */}
-          <div className="flex flex-wrap items-center gap-4 mt-4 text-sm">
-            <span className="text-slate-400 text-xs">Filter:</span>
+          {/* Location Filters */}
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <span className="text-slate-400 text-xs">Region:</span>
+            
+            {/* Region dropdown */}
+            <select
+              value={selectedRegion}
+              onChange={(e) => handleRegionChange(e.target.value)}
+              className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All US</option>
+              {Object.entries(US_REGIONS).map(([id, region]) => (
+                <option key={id} value={id}>{region.name}</option>
+              ))}
+            </select>
+
+            {/* States multi-select */}
+            <div className="relative">
+              <button
+                onClick={() => setShowStateDropdown(!showStateDropdown)}
+                className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-700 transition-colors"
+              >
+                <span>
+                  {selectedStates.length > 0 
+                    ? `${selectedStates.length} state${selectedStates.length > 1 ? 's' : ''}`
+                    : 'Select States'
+                  }
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showStateDropdown && (
+                <div className="absolute z-50 mt-1 w-64 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-md shadow-lg">
+                  <div className="p-2 border-b border-slate-700 flex justify-between">
+                    <button
+                      onClick={() => setSelectedStates(Object.keys(US_STATES))}
+                      className="text-xs text-blue-400 hover:text-blue-300"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => setSelectedStates([])}
+                      className="text-xs text-slate-400 hover:text-slate-300"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 p-2">
+                    {sortedStates.map(([code, state]) => (
+                      <label
+                        key={code}
+                        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-700 cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedStates.includes(code)}
+                          onChange={() => handleStateToggle(code)}
+                          className="rounded border-slate-600"
+                        />
+                        <span>{code}</span>
+                        <span className="text-slate-500 text-xs">({state.airports.length})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(selectedRegion || selectedStates.length > 0) && (
+              <button
+                onClick={clearLocationFilters}
+                className="text-xs text-slate-400 hover:text-slate-300 flex items-center gap-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Clear
+              </button>
+            )}
+
+            <span className="text-slate-600 mx-2 hidden sm:inline">|</span>
+            
+            {/* Flight category filters */}
+            <span className="text-slate-400 text-xs">Category:</span>
             {FLIGHT_CATEGORIES.map(cat => (
               <button
                 key={cat}
@@ -168,19 +295,30 @@ export default function Home() {
                 title={`${filters[cat] ? 'Hide' : 'Show'} ${cat} airports`}
               >
                 <span 
-                  className={`w-3 h-3 rounded-full transition-opacity ${filters[cat] ? '' : 'opacity-30'}`}
+                  className={`w-2.5 h-2.5 rounded-full transition-opacity ${filters[cat] ? '' : 'opacity-30'}`}
                   style={{ backgroundColor: getFlightCategoryColor(cat) }}
                 />
-                <span className="font-medium">{cat}</span>
-                <span className="text-slate-500">({categoryCounts[cat] || 0})</span>
+                <span className="text-sm font-medium">{cat}</span>
+                <span className="text-slate-500 text-xs">({categoryCounts[cat] || 0})</span>
               </button>
             ))}
-            <span className="text-slate-500 text-xs ml-auto hidden sm:block">
-              Showing {visibleCount} of {airports.length} airports
-            </span>
+          </div>
+
+          {/* Airport count */}
+          <div className="mt-2 text-xs text-slate-500">
+            Showing {visibleCount} of {airports.length} airports
+            {isLoading && <span className="ml-2 text-blue-400">Loading...</span>}
           </div>
         </div>
       </header>
+
+      {/* Click outside to close dropdown */}
+      {showStateDropdown && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowStateDropdown(false)}
+        />
+      )}
 
       {/* Error message */}
       {error && (
