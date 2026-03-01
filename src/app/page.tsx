@@ -21,6 +21,7 @@ export default function Home() {
   const [selectedRegion, setSelectedRegion] = useState<string>('');
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   
   // Flight category filters
   const [filters, setFilters] = useState<Record<string, boolean>>({
@@ -88,31 +89,21 @@ export default function Home() {
     }
   }, [selectedStates, selectedRegion]);
 
-  // Fetch when filters change
   useEffect(() => {
     fetchAirports();
   }, [selectedStates, selectedRegion, fetchAirports]);
 
-  // Auto-refresh every 5 minutes
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetchAirports();
-    }, 5 * 60 * 1000);
-
+    const interval = setInterval(() => fetchAirports(), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAirports]);
 
-  const handleSearch = (icao: string) => {
-    fetchAirports(icao, true);
-  };
-
-  const handleRefresh = () => {
-    fetchAirports();
-  };
+  const handleSearch = (icao: string) => fetchAirports(icao, true);
+  const handleRefresh = () => fetchAirports();
 
   const handleRegionChange = (region: string) => {
     setSelectedRegion(region);
-    setSelectedStates([]); // Clear states when region changes
+    setSelectedStates([]);
   };
 
   const handleStateToggle = (stateCode: string) => {
@@ -121,7 +112,7 @@ export default function Home() {
         ? prev.filter(s => s !== stateCode)
         : [...prev, stateCode]
     );
-    setSelectedRegion(''); // Clear region when states are manually selected
+    setSelectedRegion('');
   };
 
   const clearLocationFilters = () => {
@@ -129,7 +120,6 @@ export default function Home() {
     setSelectedStates([]);
   };
 
-  // Count airports by category
   const categoryCounts = useMemo(() => 
     airports.reduce((acc, a) => {
       const cat = a.fltCat || 'Unknown';
@@ -139,223 +129,242 @@ export default function Home() {
     [airports]
   );
 
-  // Count visible airports
   const visibleCount = useMemo(() => 
-    airports.filter(a => {
-      const cat = a.fltCat || 'Unknown';
-      return filters[cat] !== false;
-    }).length,
+    airports.filter(a => filters[a.fltCat || 'Unknown'] !== false).length,
     [airports, filters]
   );
 
-  // States sorted alphabetically
   const sortedStates = useMemo(() => 
-    Object.entries(US_STATES)
-      .sort((a, b) => a[1].name.localeCompare(b[1].name)),
+    Object.entries(US_STATES).sort((a, b) => a[1].name.localeCompare(b[1].name)),
     []
   );
 
-  return (
-    <main className="h-screen flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-700 p-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold">Aviation Weather</h1>
-                <p className="text-sm text-slate-400">Real-time METAR & Flight Categories</p>
-              </div>
-            </div>
-            
-            <div className="flex-1 max-w-md">
-              <SearchBar onSearch={handleSearch} isLoading={isLoading} />
-            </div>
+  const activeFiltersCount = (selectedRegion ? 1 : 0) + selectedStates.length + 
+    FLIGHT_CATEGORIES.filter(c => !filters[c]).length;
 
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="p-2 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
-                title="Refresh data"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              
-              {lastUpdated && (
-                <span className="text-xs text-slate-500 hidden md:block">
-                  Updated: {lastUpdated.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+  return (
+    <main className="h-[100dvh] flex flex-col bg-slate-950">
+      {/* Compact Header */}
+      <header className="bg-slate-900 border-b border-slate-700 px-3 py-2 sm:px-4 sm:py-3">
+        <div className="flex items-center gap-2 sm:gap-4">
+          {/* Logo - smaller on mobile */}
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+            </svg>
+          </div>
+          
+          {/* Title - hidden on very small screens */}
+          <div className="hidden sm:block">
+            <h1 className="text-lg font-bold leading-tight">Aviation Weather</h1>
+            <p className="text-xs text-slate-400">Real-time METAR</p>
+          </div>
+          
+          {/* Search - grows to fill */}
+          <div className="flex-1 min-w-0">
+            <SearchBar onSearch={handleSearch} isLoading={isLoading} />
           </div>
 
-          {/* Location Filters */}
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            <span className="text-slate-400 text-xs">Region:</span>
-            
-            {/* Region dropdown */}
-            <select
-              value={selectedRegion}
-              onChange={(e) => handleRegionChange(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All US</option>
-              {Object.entries(US_REGIONS).map(([id, region]) => (
-                <option key={id} value={id}>{region.name}</option>
-              ))}
-            </select>
+          {/* Filter toggle button (mobile) */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`sm:hidden p-2 rounded-lg transition-colors relative ${showFilters ? 'bg-blue-600' : 'bg-slate-800'}`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            {activeFiltersCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-xs flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
 
-            {/* States multi-select */}
-            <div className="relative">
+          {/* Refresh */}
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Desktop filters - always visible */}
+        <div className="hidden sm:flex flex-wrap items-center gap-2 mt-3">
+          <select
+            value={selectedRegion}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-sm"
+          >
+            <option value="">All US</option>
+            {Object.entries(US_REGIONS).map(([id, region]) => (
+              <option key={id} value={id}>{region.name}</option>
+            ))}
+          </select>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowStateDropdown(!showStateDropdown)}
+              className="bg-slate-800 border border-slate-700 rounded-md px-2 py-1 text-sm flex items-center gap-1"
+            >
+              {selectedStates.length > 0 ? `${selectedStates.length} states` : 'States'}
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showStateDropdown && (
+              <div className="absolute z-50 mt-1 w-72 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-md shadow-lg">
+                <div className="p-2 border-b border-slate-700 flex justify-between sticky top-0 bg-slate-800">
+                  <button onClick={() => setSelectedStates(Object.keys(US_STATES))} className="text-xs text-blue-400">Select All</button>
+                  <button onClick={() => setSelectedStates([])} className="text-xs text-slate-400">Clear</button>
+                </div>
+                <div className="grid grid-cols-3 gap-1 p-2">
+                  {sortedStates.map(([code]) => (
+                    <label key={code} className="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-slate-700 cursor-pointer text-xs">
+                      <input type="checkbox" checked={selectedStates.includes(code)} onChange={() => handleStateToggle(code)} className="rounded border-slate-600 w-3 h-3" />
+                      {code}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {(selectedRegion || selectedStates.length > 0) && (
+            <button onClick={clearLocationFilters} className="text-xs text-slate-400 hover:text-white">✕ Clear</button>
+          )}
+
+          <span className="text-slate-600">|</span>
+
+          {FLIGHT_CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => toggleFilter(cat)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${filters[cat] ? 'bg-slate-800' : 'bg-slate-800/30 opacity-50'}`}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getFlightCategoryColor(cat) }} />
+              {cat} ({categoryCounts[cat] || 0})
+            </button>
+          ))}
+
+          <span className="text-xs text-slate-500 ml-auto">
+            {visibleCount}/{airports.length} airports
+            {lastUpdated && ` • ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+          </span>
+        </div>
+
+        {/* Mobile filters panel */}
+        {showFilters && (
+          <div className="sm:hidden mt-3 p-3 bg-slate-800 rounded-lg space-y-3">
+            <div className="flex gap-2">
+              <select
+                value={selectedRegion}
+                onChange={(e) => handleRegionChange(e.target.value)}
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">All Regions</option>
+                {Object.entries(US_REGIONS).map(([id, region]) => (
+                  <option key={id} value={id}>{region.name}</option>
+                ))}
+              </select>
+              
               <button
                 onClick={() => setShowStateDropdown(!showStateDropdown)}
-                className="bg-slate-800 border border-slate-700 rounded-md px-3 py-1.5 text-sm flex items-center gap-2 hover:bg-slate-700 transition-colors"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-sm text-left"
               >
-                <span>
-                  {selectedStates.length > 0 
-                    ? `${selectedStates.length} state${selectedStates.length > 1 ? 's' : ''}`
-                    : 'Select States'
-                  }
-                </span>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+                {selectedStates.length > 0 ? `${selectedStates.length} states` : 'Select states'}
               </button>
-              
-              {showStateDropdown && (
-                <div className="absolute z-50 mt-1 w-64 max-h-64 overflow-y-auto bg-slate-800 border border-slate-700 rounded-md shadow-lg">
-                  <div className="p-2 border-b border-slate-700 flex justify-between">
-                    <button
-                      onClick={() => setSelectedStates(Object.keys(US_STATES))}
-                      className="text-xs text-blue-400 hover:text-blue-300"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      onClick={() => setSelectedStates([])}
-                      className="text-xs text-slate-400 hover:text-slate-300"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 p-2">
-                    {sortedStates.map(([code, state]) => (
-                      <label
-                        key={code}
-                        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-700 cursor-pointer text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStates.includes(code)}
-                          onChange={() => handleStateToggle(code)}
-                          className="rounded border-slate-600"
-                        />
-                        <span>{code}</span>
-                        <span className="text-slate-500 text-xs">{state.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {(selectedRegion || selectedStates.length > 0) && (
-              <button
-                onClick={clearLocationFilters}
-                className="text-xs text-slate-400 hover:text-slate-300 flex items-center gap-1"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                Clear
-              </button>
+            {showStateDropdown && (
+              <div className="bg-slate-700 rounded-md p-2 max-h-40 overflow-y-auto">
+                <div className="flex justify-between mb-2">
+                  <button onClick={() => setSelectedStates(Object.keys(US_STATES))} className="text-xs text-blue-400">All</button>
+                  <button onClick={() => setSelectedStates([])} className="text-xs text-slate-400">Clear</button>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {sortedStates.map(([code]) => (
+                    <label key={code} className={`flex items-center justify-center p-1.5 rounded text-xs cursor-pointer ${selectedStates.includes(code) ? 'bg-blue-600' : 'bg-slate-600'}`}>
+                      <input type="checkbox" checked={selectedStates.includes(code)} onChange={() => handleStateToggle(code)} className="sr-only" />
+                      {code}
+                    </label>
+                  ))}
+                </div>
+              </div>
             )}
 
-            <span className="text-slate-600 mx-2 hidden sm:inline">|</span>
-            
-            {/* Flight category filters */}
-            <span className="text-slate-400 text-xs">Category:</span>
-            {FLIGHT_CATEGORIES.map(cat => (
-              <button
-                key={cat}
-                onClick={() => toggleFilter(cat)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all ${
-                  filters[cat] 
-                    ? 'bg-slate-800 hover:bg-slate-700' 
-                    : 'bg-slate-800/30 opacity-50 hover:opacity-75'
-                }`}
-                title={`${filters[cat] ? 'Hide' : 'Show'} ${cat} airports`}
-              >
-                <span 
-                  className={`w-2.5 h-2.5 rounded-full transition-opacity ${filters[cat] ? '' : 'opacity-30'}`}
-                  style={{ backgroundColor: getFlightCategoryColor(cat) }}
-                />
-                <span className="text-sm font-medium">{cat}</span>
-                <span className="text-slate-500 text-xs">({categoryCounts[cat] || 0})</span>
-              </button>
-            ))}
-          </div>
+            <div className="flex flex-wrap gap-2">
+              {FLIGHT_CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => toggleFilter(cat)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${filters[cat] ? 'bg-slate-700' : 'bg-slate-700/30 opacity-50'}`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getFlightCategoryColor(cat) }} />
+                  {cat}
+                  <span className="text-slate-400">({categoryCounts[cat] || 0})</span>
+                </button>
+              ))}
+            </div>
 
-          {/* Airport count */}
-          <div className="mt-2 text-xs text-slate-500">
-            Showing {visibleCount} of {airports.length} airports
-            {isLoading && <span className="ml-2 text-blue-400">Loading...</span>}
+            <div className="text-xs text-slate-400 text-center">
+              Showing {visibleCount} of {airports.length} airports
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
-      {/* Click outside to close dropdown */}
-      {showStateDropdown && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowStateDropdown(false)}
-        />
-      )}
+      {/* Click outside to close dropdowns */}
+      {showStateDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowStateDropdown(false)} />}
 
-      {/* Error message */}
+      {/* Error */}
       {error && (
-        <div className="bg-red-900/50 border-b border-red-700 px-4 py-2 text-red-200 text-sm">
+        <div className="bg-red-900/50 border-b border-red-700 px-3 py-2 text-red-200 text-sm">
           {error}
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-        {/* Map */}
-        <div className="flex-1 relative">
-          <MapWrapper 
-            airports={airports} 
-            selectedAirport={selectedAirport}
-            onAirportSelect={setSelectedAirport}
-            filters={filters}
+      {/* Map */}
+      <div className="flex-1 relative min-h-0">
+        <MapWrapper 
+          airports={airports} 
+          selectedAirport={selectedAirport}
+          onAirportSelect={setSelectedAirport}
+          filters={filters}
+        />
+        
+        {/* Mobile airport count badge */}
+        <div className="sm:hidden absolute top-2 left-2 bg-slate-900/90 backdrop-blur-sm rounded-full px-3 py-1 text-xs text-slate-300">
+          {visibleCount} airports
+        </div>
+      </div>
+
+      {/* Mobile bottom sheet for airport info */}
+      {selectedAirport && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="md:hidden fixed inset-0 bg-black/50 z-40"
+            onClick={() => setSelectedAirport(null)}
           />
           
-          {/* Map layer hint */}
-          <div className="absolute bottom-4 left-4 bg-slate-900/90 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-slate-400 pointer-events-none">
-            <span className="hidden sm:inline">💡 Use the layer control (top-right) for </span>
-            <span className="sm:hidden">💡 </span>
-            VFR Sectional & IFR charts
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        {selectedAirport && (
-          <div className="md:w-96 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto">
+          {/* Bottom sheet (mobile) / Sidebar (desktop) */}
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-50 rounded-t-2xl md:rounded-none">
+            {/* Drag handle (mobile only) */}
+            <div className="md:hidden flex justify-center py-2">
+              <div className="w-10 h-1 bg-slate-600 rounded-full" />
+            </div>
             <AirportInfo 
               airport={selectedAirport} 
               onClose={() => setSelectedAirport(null)}
             />
           </div>
-        )}
-      </div>
+        </>
+      )}
     </main>
   );
 }
