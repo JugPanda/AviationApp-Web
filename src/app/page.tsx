@@ -453,12 +453,12 @@ export default function Home() {
         <>
           {/* Backdrop */}
           <div 
-            className="md:hidden fixed inset-0 bg-black/50 z-40"
+            className="md:hidden fixed inset-0 bg-black/50 z-[1000]"
             onClick={() => setSelectedAirport(null)}
           />
           
           {/* Bottom sheet (mobile) / Sidebar (desktop) */}
-          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-50 rounded-t-2xl md:rounded-none">
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none">
             {/* Drag handle (mobile only) */}
             <div className="md:hidden flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
@@ -476,12 +476,12 @@ export default function Home() {
         <>
           {/* Backdrop */}
           <div 
-            className="md:hidden fixed inset-0 bg-black/50 z-40"
+            className="md:hidden fixed inset-0 bg-black/50 z-[1000]"
             onClick={() => setSelectedFlight(null)}
           />
           
           {/* Bottom sheet (mobile) / Sidebar (desktop) */}
-          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-50 rounded-t-2xl md:rounded-none">
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none">
             {/* Drag handle (mobile only) */}
             <div className="md:hidden flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
