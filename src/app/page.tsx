@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import MapWrapper from '@/components/MapWrapper';
 import SearchBar from '@/components/SearchBar';
 import AirportInfo from '@/components/AirportInfo';
+import FlightInfo from '@/components/FlightInfo';
+import { FlightData } from '@/components/FlightMarkers';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor } from '@/lib/utils';
 import { US_STATES, US_REGIONS } from '@/lib/airports';
@@ -31,6 +33,14 @@ export default function Home() {
     LIFR: true,
     Unknown: true,
   });
+
+  // Flight tracking state
+  const [showFlights, setShowFlights] = useState(false);
+  const [flights, setFlights] = useState<FlightData[]>([]);
+  const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
+  const [trackedFlight, setTrackedFlight] = useState<string | null>(null);
+  const [flightSearch, setFlightSearch] = useState('');
+  const [flightsLoading, setFlightsLoading] = useState(false);
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({
@@ -97,6 +107,55 @@ export default function Home() {
     const interval = setInterval(() => fetchAirports(), 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchAirports]);
+
+  // Fetch flights when enabled
+  const fetchFlights = useCallback(async (callsign?: string) => {
+    setFlightsLoading(true);
+    try {
+      let url = '/api/flights?bounds=24.396308,49.384358,-125.0,-66.93457'; // US bounds
+      if (callsign) {
+        url = `/api/flights?callsign=${callsign}`;
+      }
+      const res = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setFlights(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch flights:', err);
+    } finally {
+      setFlightsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showFlights) {
+      fetchFlights();
+      const interval = setInterval(() => fetchFlights(), 15000); // Update every 15 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showFlights, fetchFlights]);
+
+  const handleFlightSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (flightSearch.trim()) {
+      fetchFlights(flightSearch.trim());
+      setTrackedFlight(flightSearch.trim().toUpperCase());
+    }
+  };
+
+  const handleFlightSelect = (flight: FlightData) => {
+    setSelectedFlight(flight);
+    setSelectedAirport(null); // Close airport panel if open
+  };
+
+  const handleTrackFlight = (callsign: string) => {
+    if (trackedFlight === callsign) {
+      setTrackedFlight(null);
+    } else {
+      setTrackedFlight(callsign);
+    }
+  };
 
   const handleSearch = (icao: string) => fetchAirports(icao, true);
   const handleRefresh = () => fetchAirports();
@@ -180,6 +239,15 @@ export default function Home() {
             )}
           </button>
 
+          {/* Flight Tracker Toggle */}
+          <button
+            onClick={() => setShowFlights(!showFlights)}
+            className={`p-2 rounded-lg transition-colors ${showFlights ? 'bg-amber-600 text-white' : 'hover:bg-slate-800'}`}
+            title={showFlights ? 'Hide flights' : 'Show flights'}
+          >
+            <span className="text-lg">✈️</span>
+          </button>
+
           {/* Refresh */}
           <button
             onClick={handleRefresh}
@@ -191,6 +259,39 @@ export default function Home() {
             </svg>
           </button>
         </div>
+
+        {/* Flight Tracker Bar (when enabled) */}
+        {showFlights && (
+          <div className="flex items-center gap-3 mt-3 p-2 bg-slate-800 rounded-lg">
+            <span className="text-amber-400 text-sm font-medium">✈️ Flight Tracker</span>
+            <form onSubmit={handleFlightSearch} className="flex-1 flex gap-2">
+              <input
+                type="text"
+                value={flightSearch}
+                onChange={(e) => setFlightSearch(e.target.value.toUpperCase())}
+                placeholder="Search callsign (e.g. UAL123)"
+                className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-1 text-sm placeholder:text-slate-500"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-500 rounded text-sm font-medium"
+              >
+                Track
+              </button>
+            </form>
+            <span className="text-xs text-slate-400">
+              {flightsLoading ? 'Loading...' : `${flights.length} flights`}
+            </span>
+            {trackedFlight && (
+              <button
+                onClick={() => setTrackedFlight(null)}
+                className="text-xs text-slate-400 hover:text-white"
+              >
+                ✕ Clear tracking
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Desktop filters - always visible */}
         <div className="hidden sm:flex flex-wrap items-center gap-2 mt-3">
@@ -335,6 +436,10 @@ export default function Home() {
           selectedAirport={selectedAirport}
           onAirportSelect={setSelectedAirport}
           filters={filters}
+          flights={flights}
+          trackedFlight={trackedFlight}
+          onFlightSelect={handleFlightSelect}
+          showFlights={showFlights}
         />
         
         {/* Mobile airport count badge */}
@@ -361,6 +466,31 @@ export default function Home() {
             <AirportInfo 
               airport={selectedAirport} 
               onClose={() => setSelectedAirport(null)}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Mobile bottom sheet for flight info */}
+      {selectedFlight && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="md:hidden fixed inset-0 bg-black/50 z-40"
+            onClick={() => setSelectedFlight(null)}
+          />
+          
+          {/* Bottom sheet (mobile) / Sidebar (desktop) */}
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-50 rounded-t-2xl md:rounded-none">
+            {/* Drag handle (mobile only) */}
+            <div className="md:hidden flex justify-center py-2">
+              <div className="w-10 h-1 bg-slate-600 rounded-full" />
+            </div>
+            <FlightInfo 
+              flight={selectedFlight} 
+              onClose={() => setSelectedFlight(null)}
+              onTrack={handleTrackFlight}
+              isTracking={trackedFlight === selectedFlight.callsign}
             />
           </div>
         </>

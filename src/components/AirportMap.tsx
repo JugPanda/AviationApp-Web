@@ -4,6 +4,7 @@ import { useEffect, useMemo, memo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap, LayersControl } from 'react-leaflet';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature, formatAltimeter, formatObsTime } from '@/lib/utils';
+import FlightMarkers, { FlightData } from './FlightMarkers';
 import 'leaflet/dist/leaflet.css';
 
 interface AirportMapProps {
@@ -13,6 +14,10 @@ interface AirportMapProps {
   filters: Record<string, boolean>;
   center?: [number, number];
   zoom?: number;
+  flights?: FlightData[];
+  trackedFlight?: string | null;
+  onFlightSelect?: (flight: FlightData) => void;
+  showFlights?: boolean;
 }
 
 // Memoized controller to prevent unnecessary re-renders
@@ -157,7 +162,11 @@ export default function AirportMap({
   onAirportSelect,
   filters,
   center = [39.8283, -98.5795], // Center of US
-  zoom = 4 
+  zoom = 4,
+  flights = [],
+  trackedFlight = null,
+  onFlightSelect,
+  showFlights = false,
 }: AirportMapProps) {
   // Memoize filtered airports with coordinate validation
   const filteredAirports = useMemo(() => 
@@ -256,6 +265,15 @@ export default function AirportMap({
       <MapController selectedAirport={selectedAirport} />
       
       {markers}
+      
+      {/* Flight tracking layer */}
+      {showFlights && flights.length > 0 && onFlightSelect && (
+        <FlightMarkers 
+          flights={flights} 
+          trackedFlight={trackedFlight} 
+          onFlightSelect={onFlightSelect} 
+        />
+      )}
     </MapContainer>
   );
 }

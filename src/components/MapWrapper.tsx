@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { MetarData } from '@/types';
 import { ErrorBoundary } from './ErrorBoundary';
+import { FlightData } from './FlightMarkers';
 
 const AirportMap = dynamic(() => import('./AirportMap'), {
   ssr: false,
@@ -24,16 +25,33 @@ interface MapWrapperProps {
   selectedAirport: MetarData | null;
   onAirportSelect: (airport: MetarData) => void;
   filters: Record<string, boolean>;
+  flights?: FlightData[];
+  trackedFlight?: string | null;
+  onFlightSelect?: (flight: FlightData) => void;
+  showFlights?: boolean;
 }
 
-export default function MapWrapper({ airports, selectedAirport, onAirportSelect, filters }: MapWrapperProps) {
+export default function MapWrapper({ 
+  airports, 
+  selectedAirport, 
+  onAirportSelect, 
+  filters,
+  flights = [],
+  trackedFlight = null,
+  onFlightSelect,
+  showFlights = false,
+}: MapWrapperProps) {
   return (
     <ErrorBoundary>
       <AirportMap 
         airports={airports} 
         selectedAirport={selectedAirport} 
         onAirportSelect={onAirportSelect} 
-        filters={filters} 
+        filters={filters}
+        flights={flights}
+        trackedFlight={trackedFlight}
+        onFlightSelect={onFlightSelect}
+        showFlights={showFlights}
       />
     </ErrorBoundary>
   );
