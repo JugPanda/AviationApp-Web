@@ -221,6 +221,75 @@ const AirportMarker = memo(function AirportMarker({
   );
 });
 
+// Weather overlay definitions
+const WEATHER_OVERLAYS = {
+  radar: {
+    name: 'Weather Radar',
+    // RainViewer free radar tiles
+    getUrl: () => {
+      const timestamp = Math.floor(Date.now() / 600000) * 600; // 10-min intervals
+      return `https://tilecache.rainviewer.com/v2/radar/${timestamp}/256/{z}/{x}/{y}/2/1_1.png`;
+    },
+    attribution: '&copy; <a href="https://rainviewer.com">RainViewer</a>',
+    opacity: 0.6,
+  },
+  clouds: {
+    name: 'Cloud Cover',
+    url: 'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    attribution: '&copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+    opacity: 0.5,
+  },
+  wind: {
+    name: 'Wind Speed',
+    url: 'https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    attribution: '&copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+    opacity: 0.5,
+  },
+  temp: {
+    name: 'Temperature',
+    url: 'https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    attribution: '&copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+    opacity: 0.5,
+  },
+  pressure: {
+    name: 'Sea Level Pressure',
+    url: 'https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2',
+    attribution: '&copy; <a href="https://openweathermap.org">OpenWeatherMap</a>',
+    opacity: 0.5,
+  },
+};
+
+// Wind barb component for airport markers
+const WindBarb = memo(function WindBarb({ 
+  wdir, 
+  wspd, 
+  x = 0, 
+  y = 0 
+}: { 
+  wdir: number | null | undefined; 
+  wspd: number | null | undefined;
+  x?: number;
+  y?: number;
+}) {
+  if (wdir == null || wspd == null || wspd === 0) return null;
+  
+  // Create wind barb SVG path
+  const barbLength = 15;
+  const radians = ((wdir - 90) * Math.PI) / 180; // Convert to radians, adjust for SVG coordinates
+  
+  return (
+    <line
+      x1={x}
+      y1={y}
+      x2={x + Math.cos(radians) * barbLength}
+      y2={y + Math.sin(radians) * barbLength}
+      stroke="white"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+  );
+});
+
 // Map layer definitions
 const MAP_LAYERS = {
   dark: {
@@ -433,6 +502,47 @@ export default function AirportMap({
             minZoom={MAP_LAYERS.ifr_high.minZoom}
           />
         </LayersControl.BaseLayer>
+
+        {/* Weather Overlay Layers */}
+        <LayersControl.Overlay name="🌧️ Weather Radar">
+          <TileLayer
+            attribution={WEATHER_OVERLAYS.radar.attribution}
+            url={WEATHER_OVERLAYS.radar.getUrl()}
+            opacity={WEATHER_OVERLAYS.radar.opacity}
+          />
+        </LayersControl.Overlay>
+
+        <LayersControl.Overlay name="☁️ Cloud Cover">
+          <TileLayer
+            attribution={WEATHER_OVERLAYS.clouds.attribution}
+            url={WEATHER_OVERLAYS.clouds.url}
+            opacity={WEATHER_OVERLAYS.clouds.opacity}
+          />
+        </LayersControl.Overlay>
+
+        <LayersControl.Overlay name="💨 Wind Speed">
+          <TileLayer
+            attribution={WEATHER_OVERLAYS.wind.attribution}
+            url={WEATHER_OVERLAYS.wind.url}
+            opacity={WEATHER_OVERLAYS.wind.opacity}
+          />
+        </LayersControl.Overlay>
+
+        <LayersControl.Overlay name="🌡️ Temperature">
+          <TileLayer
+            attribution={WEATHER_OVERLAYS.temp.attribution}
+            url={WEATHER_OVERLAYS.temp.url}
+            opacity={WEATHER_OVERLAYS.temp.opacity}
+          />
+        </LayersControl.Overlay>
+
+        <LayersControl.Overlay name="📊 Pressure">
+          <TileLayer
+            attribution={WEATHER_OVERLAYS.pressure.attribution}
+            url={WEATHER_OVERLAYS.pressure.url}
+            opacity={WEATHER_OVERLAYS.pressure.opacity}
+          />
+        </LayersControl.Overlay>
       </LayersControl>
 
       <MapController selectedAirport={selectedAirport} />
