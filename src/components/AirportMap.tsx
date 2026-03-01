@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, memo } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap, LayersControl } from 'react-leaflet';
+import { useEffect, useMemo, memo, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, LayersControl, Circle, Marker } from 'react-leaflet';
+import L from 'leaflet';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature, formatAltimeter, formatObsTime } from '@/lib/utils';
 import FlightMarkers, { FlightData } from './FlightMarkers';
@@ -19,6 +20,119 @@ interface AirportMapProps {
   onFlightSelect?: (flight: FlightData) => void;
   showFlights?: boolean;
 }
+
+// Custom icon for user location
+const userLocationIcon = L.divIcon({
+  className: 'user-location-marker',
+  html: `
+    <div style="
+      width: 20px;
+      height: 20px;
+      background: #3b82f6;
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    "></div>
+  `,
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
+
+// Location control component
+const LocationControl = memo(function LocationControl({ 
+  userLocation, 
+  onLocate,
+  isLocating 
+}: { 
+  userLocation: [number, number] | null;
+  onLocate: () => void;
+  isLocating: boolean;
+}) {
+  const map = useMap();
+
+  const handleClick = () => {
+    if (userLocation) {
+      map.flyTo(userLocation, 10, { duration: 1 });
+    } else {
+      onLocate();
+    }
+  };
+
+  return (
+    <div className="leaflet-top leaflet-left" style={{ marginTop: '80px' }}>
+      <div className="leaflet-control leaflet-bar">
+        <button
+          onClick={handleClick}
+          disabled={isLocating}
+          title={userLocation ? "Go to my location" : "Find my location"}
+          style={{
+            width: '34px',
+            height: '34px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'white',
+            border: 'none',
+            cursor: isLocating ? 'wait' : 'pointer',
+            borderRadius: '4px',
+          }}
+        >
+          {isLocating ? (
+            <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+              <path d="M12 2a10 10 0 0 1 10 10" />
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={userLocation ? "#3b82f6" : "#333"} strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// User location marker
+const UserLocationMarker = memo(function UserLocationMarker({ 
+  position, 
+  accuracy 
+}: { 
+  position: [number, number];
+  accuracy: number;
+}) {
+  return (
+    <>
+      {/* Accuracy circle */}
+      <Circle
+        center={position}
+        radius={accuracy}
+        pathOptions={{
+          fillColor: '#3b82f6',
+          fillOpacity: 0.1,
+          color: '#3b82f6',
+          weight: 1,
+          opacity: 0.3,
+        }}
+      />
+      {/* Location dot */}
+      <Marker position={position} icon={userLocationIcon}>
+        <Popup>
+          <div className="text-center">
+            <div className="font-bold">Your Location</div>
+            <div className="text-sm text-gray-400">
+              {position[0].toFixed(4)}, {position[1].toFixed(4)}
+            </div>
+            <div className="text-xs text-gray-500">
+              Accuracy: ±{Math.round(accuracy)}m
+            </div>
+          </div>
+        </Popup>
+      </Marker>
+    </>
+  );
+});
 
 // Memoized controller to prevent unnecessary re-renders
 const MapController = memo(function MapController({ selectedAirport }: { selectedAirport: MetarData | null }) {
@@ -168,6 +282,50 @@ export default function AirportMap({
   onFlightSelect,
   showFlights = false,
 }: AirportMapProps) {
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number>(0);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const handleLocate = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation([position.coords.latitude, position.coords.longitude]);
+        setLocationAccuracy(position.coords.accuracy);
+        setIsLocating(false);
+      },
+      (error) => {
+        setIsLocating(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setLocationError('Location permission denied');
+            break;
+          case error.POSITION_UNAVAILABLE:
+            setLocationError('Location unavailable');
+            break;
+          case error.TIMEOUT:
+            setLocationError('Location request timed out');
+            break;
+          default:
+            setLocationError('Unable to get location');
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }, []);
+
   // Memoize filtered airports with coordinate validation
   const filteredAirports = useMemo(() => 
     airports.filter(airport => {
@@ -200,6 +358,21 @@ export default function AirportMap({
       className="w-full h-full"
       style={{ background: '#1e293b' }}
     >
+      {/* Location control button */}
+      <LocationControl 
+        userLocation={userLocation} 
+        onLocate={handleLocate}
+        isLocating={isLocating}
+      />
+
+      {/* User location marker */}
+      {userLocation && (
+        <UserLocationMarker 
+          position={userLocation} 
+          accuracy={locationAccuracy} 
+        />
+      )}
+
       <LayersControl position="topright">
         {/* Base Layers */}
         <LayersControl.BaseLayer checked name="Dark">
