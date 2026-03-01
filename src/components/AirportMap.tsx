@@ -41,18 +41,21 @@ const AirportMarker = memo(function AirportMarker({
   onSelect: () => void;
 }) {
   // Skip if invalid coordinates
-  if (!airport.lat || !airport.lon || isNaN(airport.lat) || isNaN(airport.lon)) {
+  if (typeof airport.lat !== 'number' || typeof airport.lon !== 'number' || 
+      isNaN(airport.lat) || isNaN(airport.lon)) {
     return null;
   }
+
+  const fltCat = airport.fltCat ?? null;
 
   return (
     <CircleMarker
       center={[airport.lat, airport.lon]}
       radius={isSelected ? 12 : 8}
       pathOptions={{
-        fillColor: getFlightCategoryColor(airport.fltCat),
+        fillColor: getFlightCategoryColor(fltCat),
         fillOpacity: 0.9,
-        color: isSelected ? '#fff' : getFlightCategoryColor(airport.fltCat),
+        color: isSelected ? '#fff' : getFlightCategoryColor(fltCat),
         weight: isSelected ? 3 : 2,
       }}
       eventHandlers={{
@@ -61,14 +64,14 @@ const AirportMarker = memo(function AirportMarker({
     >
       <Popup>
         <div className="min-w-[200px]">
-          <div className="font-bold text-lg">{airport.icaoId}</div>
-          <div className="text-sm text-gray-400 mb-2">{airport.name}</div>
+          <div className="font-bold text-lg">{airport.icaoId || 'Unknown'}</div>
+          <div className="text-sm text-gray-400 mb-2">{airport.name || 'Unknown Airport'}</div>
           
           <div 
             className="inline-block px-2 py-1 rounded text-white text-sm font-bold mb-2"
-            style={{ backgroundColor: getFlightCategoryColor(airport.fltCat) }}
+            style={{ backgroundColor: getFlightCategoryColor(fltCat) }}
           >
-            {airport.fltCat || 'N/A'}
+            {fltCat || 'N/A'}
           </div>
           
           <div className="grid grid-cols-2 gap-2 text-sm">
