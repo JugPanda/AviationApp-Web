@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { assessWind, getSafetyClass } from '@/lib/weather-utils';
 
 interface WindDisplayProps {
@@ -129,7 +130,7 @@ export function WindBarbs({
   }
   
   // Generate barbs based on speed
-  const barbs: JSX.Element[] = [];
+  const barbs: React.ReactElement[] = [];
   let remainingSpeed = speed;
   let barbY = 4;
   const barbSpacing = 2.5;
