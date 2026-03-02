@@ -11,6 +11,8 @@ import {
   formatObsTime,
   cn
 } from '@/lib/utils';
+import WindDisplay from '@/components/weather/WindDisplay';
+import CloudVisualization from '@/components/weather/CloudVisualization';
 
 interface AirportInfoProps {
   airport: MetarData | null;
@@ -150,44 +152,27 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
             <InfoItem label="Observed" value={formatObsTime(airport.obsTime)} />
           </div>
 
-          {/* Wind Direction Indicator */}
-          {airport.wdir != null && airport.wspd != null && airport.wspd > 0 && (
-            <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-              <div className="flex items-center gap-3 bg-slate-700/50 rounded-lg p-3">
-                <div 
-                  className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center"
-                  style={{ transform: `rotate(${airport.wdir}deg)` }}
-                >
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <path d="M16 4 L16 28 M16 4 L10 12 M16 4 L22 12" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <div>
-                  <div className="text-sm font-medium">
-                    {airport.wdir}° at {airport.wspd} kt
-                    {airport.wgst && <span className="text-yellow-400"> G{airport.wgst}</span>}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    From the {getWindDirection(airport.wdir)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Wind Display */}
+          <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+            <h3 className="text-xs text-slate-400 mb-2">Wind</h3>
+            <WindDisplay 
+              direction={airport.wdir} 
+              speed={airport.wspd} 
+              gust={airport.wgst}
+              size="md"
+              showLabel={true}
+            />
+          </div>
 
-          {/* Clouds */}
-          {airport.clouds && airport.clouds.length > 0 && (
-            <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-              <h3 className="text-xs text-slate-400 mb-1.5 sm:mb-2">Clouds</h3>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                {airport.clouds.map((cloud, i) => (
-                  <span key={i} className="px-2 py-0.5 bg-slate-700 rounded text-xs sm:text-sm">
-                    {cloud.cover} @ {cloud.base?.toLocaleString() ?? '--'} ft
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Clouds Visualization */}
+          <div className="px-3 sm:px-4 pb-3 sm:pb-4">
+            <h3 className="text-xs text-slate-400 mb-2">Cloud Layers</h3>
+            <CloudVisualization 
+              clouds={airport.clouds} 
+              compact={true}
+              showScale={true}
+            />
+          </div>
 
           {/* Raw METAR */}
           {airport.rawOb && (

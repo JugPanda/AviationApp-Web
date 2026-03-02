@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import MapWrapper from '@/components/MapWrapper';
 import SearchBar from '@/components/SearchBar';
 import AirportInfo from '@/components/AirportInfo';
@@ -247,6 +248,15 @@ export default function Home() {
           >
             <span className="text-lg">✈️</span>
           </button>
+
+          {/* Tools Link */}
+          <Link
+            href="/tools"
+            className="p-2 rounded-lg transition-colors hover:bg-slate-800"
+            title="Pilot Tools"
+          >
+            <span className="text-lg">🛠️</span>
+          </Link>
 
           {/* Refresh */}
           <button
