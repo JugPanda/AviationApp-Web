@@ -24,9 +24,10 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value.toUpperCase())}
-        placeholder="ICAO (KJFK)"
+        placeholder="KJFK, KLAX, KATL..."
         className="flex-1 min-w-0 px-3 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
         maxLength={4}
+        title="Enter 4-letter ICAO code (e.g., KJFK for JFK Airport)"
       />
       <button
         type="submit"

@@ -4,8 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import WeightBalance from '@/components/tools/WeightBalance';
 import DensityAltitude from '@/components/tools/DensityAltitude';
+import CrosswindCalculator from '@/components/tools/CrosswindCalculator';
 
-type Tool = 'weight-balance' | 'density-altitude';
+type Tool = 'weight-balance' | 'density-altitude' | 'crosswind';
 
 export default function ToolsPage() {
   const [activeTool, setActiveTool] = useState<Tool>('weight-balance');
@@ -47,6 +48,12 @@ export default function ToolsPage() {
             icon="🏔️"
             label="Density Altitude"
           />
+          <ToolTab 
+            active={activeTool === 'crosswind'} 
+            onClick={() => setActiveTool('crosswind')}
+            icon="🌬️"
+            label="Crosswind"
+          />
         </div>
       </div>
 
@@ -54,6 +61,7 @@ export default function ToolsPage() {
       <div className="p-4 max-w-4xl mx-auto">
         {activeTool === 'weight-balance' && <WeightBalance />}
         {activeTool === 'density-altitude' && <DensityAltitude />}
+        {activeTool === 'crosswind' && <CrosswindCalculator />}
       </div>
     </main>
   );

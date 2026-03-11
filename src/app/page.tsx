@@ -207,10 +207,20 @@ export default function Home() {
       {/* Compact Header */}
       <header className="bg-slate-900 border-b border-slate-700 px-3 py-2 sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Logo - smaller on mobile */}
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+          {/* Logo - airplane compass design matching favicon */}
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center flex-shrink-0 border border-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 24 24">
+              {/* Compass ring */}
+              <circle cx="12" cy="12" r="10" fill="none" stroke="#334155" strokeWidth="1.5"/>
+              {/* Cardinal marks */}
+              <line x1="12" y1="2" x2="12" y2="4" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/>
+              <line x1="12" y1="20" x2="12" y2="22" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/>
+              <line x1="2" y1="12" x2="4" y2="12" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/>
+              <line x1="20" y1="12" x2="22" y2="12" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/>
+              {/* Airplane */}
+              <polygon points="12,4 14,16 12,14 10,16" fill="white"/>
+              <polygon points="12,10 18,13 18,14 12,12" fill="white"/>
+              <polygon points="12,10 6,13 6,14 12,12" fill="white"/>
             </svg>
           </div>
           
@@ -246,7 +256,9 @@ export default function Home() {
             className={`p-2 rounded-lg transition-colors ${showFlights ? 'bg-amber-600 text-white' : 'hover:bg-slate-800'}`}
             title={showFlights ? 'Hide flights' : 'Show flights'}
           >
-            <span className="text-lg">✈️</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
           </button>
 
           {/* Tools Link */}
@@ -255,7 +267,10 @@ export default function Home() {
             className="p-2 rounded-lg transition-colors hover:bg-slate-800"
             title="Pilot Tools"
           >
-            <span className="text-lg">🛠️</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
           </Link>
 
           {/* Refresh */}
