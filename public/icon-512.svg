@@ -1,16 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e3a5f"/>
-      <stop offset="100%" style="stop-color:#0f172a"/>
-    </linearGradient>
-    <linearGradient id="planeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffffff"/>
-      <stop offset="100%" style="stop-color:#e2e8f0"/>
-    </linearGradient>
-  </defs>
   <!-- Background -->
-  <rect width="512" height="512" fill="url(#bgGrad)" rx="96"/>
+  <rect width="512" height="512" fill="#0f172a" rx="96"/>
   <!-- Outer compass ring -->
   <circle cx="256" cy="256" r="180" fill="none" stroke="#334155" stroke-width="8"/>
   <!-- Cardinal direction marks -->
@@ -18,14 +8,14 @@
   <line x1="256" y1="412" x2="256" y2="444" stroke="#64748b" stroke-width="6" stroke-linecap="round"/>
   <line x1="68" y1="256" x2="100" y2="256" stroke="#64748b" stroke-width="6" stroke-linecap="round"/>
   <line x1="412" y1="256" x2="444" y2="256" stroke="#64748b" stroke-width="6" stroke-linecap="round"/>
-  <!-- Airplane silhouette pointing up -->
-  <g transform="translate(256, 256)">
-    <!-- Fuselage -->
-    <path d="M0,-120 L12,-60 L12,60 L30,100 L30,115 L12,100 L12,120 L25,140 L25,150 L0,135 L-25,150 L-25,140 L-12,120 L-12,100 L-30,115 L-30,100 L-12,60 L-12,-60 Z" fill="url(#planeGrad)"/>
-    <!-- Wings -->
-    <path d="M12,0 L100,40 L100,55 L12,30 Z" fill="url(#planeGrad)"/>
-    <path d="M-12,0 L-100,40 L-100,55 L-12,30 Z" fill="url(#planeGrad)"/>
-  </g>
   <!-- VFR green accent ring -->
-  <circle cx="256" cy="256" r="200" fill="none" stroke="#22c55e" stroke-width="4" stroke-dasharray="20 30" opacity="0.6"/>
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#22c55e" stroke-width="4" stroke-dasharray="20 30" opacity="0.7"/>
+  <!-- Airplane - simple triangle style -->
+  <polygon points="256,136 306,336 256,296 206,336" fill="#ffffff"/>
+  <!-- Wings -->
+  <polygon points="256,236 356,286 356,296 256,256" fill="#ffffff"/>
+  <polygon points="256,236 156,286 156,296 256,256" fill="#ffffff"/>
+  <!-- Tail fins -->
+  <polygon points="256,316 286,356 286,366 256,336" fill="#e2e8f0"/>
+  <polygon points="256,316 226,356 226,366 256,336" fill="#e2e8f0"/>
 </svg>
