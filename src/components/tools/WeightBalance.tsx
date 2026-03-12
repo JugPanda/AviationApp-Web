@@ -1,6 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  AircraftProfile,
+  CustomAircraft,
+  getProfiles,
+  createProfile,
+  updateProfile,
+  deleteProfile,
+  getCustomAircraft,
+  saveCustomAircraft,
+  deleteCustomAircraft,
+  exportProfiles,
+  importProfiles,
+} from '@/lib/profiles';
 
 // Aircraft weight & balance data
 interface Station {
@@ -99,12 +112,99 @@ interface StationInput {
   weight: number;
 }
 
+// Modal Component
+function Modal({ isOpen, onClose, title, children }: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-4 overflow-y-auto max-h-[calc(90vh-60px)]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WeightBalance() {
   const [selectedAircraft, setSelectedAircraft] = useState('C172S');
   const [fuelGallons, setFuelGallons] = useState(40);
   const [stationWeights, setStationWeights] = useState<StationInput[]>([]);
+  
+  // Profile management state
+  const [profiles, setProfiles] = useState<AircraftProfile[]>([]);
+  const [customAircraftList, setCustomAircraftList] = useState<CustomAircraft[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string>('');
+  
+  // Modal states
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [showCustomAircraftModal, setShowCustomAircraftModal] = useState(false);
+  const [showImportExportModal, setShowImportExportModal] = useState(false);
+  
+  // Form states
+  const [profileName, setProfileName] = useState('');
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [importText, setImportText] = useState('');
+  
+  // Custom aircraft form
+  const [customAircraftForm, setCustomAircraftForm] = useState<CustomAircraft>({
+    name: '',
+    emptyWeight: 1680,
+    emptyArm: 39.0,
+    maxGross: 2550,
+    fuelArm: 48.0,
+    fuelCapacity: 53,
+    fuelWeight: 6.0,
+    stations: [
+      { name: 'Pilot & Front Pax', arm: 37.0, maxWeight: 400 },
+      { name: 'Rear Passengers', arm: 73.0, maxWeight: 400 },
+      { name: 'Baggage', arm: 95.0, maxWeight: 120 },
+    ],
+    envelope: {
+      points: [
+        { weight: 1500, cgMin: 35.0, cgMax: 47.3 },
+        { weight: 2550, cgMin: 41.0, cgMax: 47.3 },
+      ]
+    }
+  });
 
-  const aircraft = AIRCRAFT_DATABASE[selectedAircraft];
+  // Combined aircraft database (built-in + custom)
+  const allAircraft = useMemo(() => {
+    const combined: Record<string, AircraftData> = { ...AIRCRAFT_DATABASE };
+    customAircraftList.forEach(custom => {
+      combined[`custom-${custom.name}`] = {
+        ...custom,
+        stations: custom.stations.map(s => ({ ...s })),
+      };
+    });
+    return combined;
+  }, [customAircraftList]);
+
+  const aircraft = allAircraft[selectedAircraft] || AIRCRAFT_DATABASE['C172S'];
+
+  // Load profiles and custom aircraft on mount
+  useEffect(() => {
+    setProfiles(getProfiles());
+    setCustomAircraftList(getCustomAircraft());
+  }, []);
 
   // Initialize station weights when aircraft changes
   useEffect(() => {
@@ -136,6 +236,147 @@ export default function WeightBalance() {
     setStationWeights(newWeights);
   };
 
+  // Profile handlers
+  const handleLoadProfile = useCallback((profileId: string) => {
+    if (!profileId) {
+      setSelectedProfile('');
+      return;
+    }
+    
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) return;
+    
+    setSelectedProfile(profileId);
+    
+    // Set aircraft type
+    if (profile.customAircraft) {
+      // Check if this custom aircraft exists in our list
+      const customKey = `custom-${profile.customAircraft.name}`;
+      if (!allAircraft[customKey]) {
+        // Save the custom aircraft from the profile
+        saveCustomAircraft(profile.customAircraft);
+        setCustomAircraftList(getCustomAircraft());
+      }
+      setSelectedAircraft(customKey);
+    } else {
+      setSelectedAircraft(profile.aircraftType);
+    }
+    
+    // Set fuel and weights after a small delay to let aircraft update
+    setTimeout(() => {
+      setFuelGallons(profile.fuelGallons);
+      setStationWeights(profile.stationWeights.map(w => ({ weight: w })));
+    }, 50);
+  }, [profiles, allAircraft]);
+
+  const handleSaveProfile = useCallback(() => {
+    if (!profileName.trim()) return;
+    
+    const profileData = {
+      name: profileName.trim(),
+      aircraftType: selectedAircraft,
+      customAircraft: selectedAircraft.startsWith('custom-') 
+        ? customAircraftList.find(c => `custom-${c.name}` === selectedAircraft)
+        : undefined,
+      fuelGallons,
+      stationWeights: stationWeights.map(s => s.weight),
+    };
+    
+    if (editingProfileId) {
+      updateProfile(editingProfileId, profileData);
+    } else {
+      createProfile(profileData);
+    }
+    
+    setProfiles(getProfiles());
+    setShowSaveModal(false);
+    setProfileName('');
+    setEditingProfileId(null);
+  }, [profileName, selectedAircraft, fuelGallons, stationWeights, editingProfileId, customAircraftList]);
+
+  const handleDeleteProfile = useCallback((id: string) => {
+    if (confirm('Delete this profile?')) {
+      deleteProfile(id);
+      setProfiles(getProfiles());
+      if (selectedProfile === id) {
+        setSelectedProfile('');
+      }
+    }
+  }, [selectedProfile]);
+
+  const handleEditProfile = useCallback((profile: AircraftProfile) => {
+    setProfileName(profile.name);
+    setEditingProfileId(profile.id);
+    setShowManageModal(false);
+    setShowSaveModal(true);
+  }, []);
+
+  // Custom aircraft handlers
+  const handleSaveCustomAircraft = useCallback(() => {
+    if (!customAircraftForm.name.trim()) return;
+    
+    saveCustomAircraft(customAircraftForm);
+    setCustomAircraftList(getCustomAircraft());
+    setSelectedAircraft(`custom-${customAircraftForm.name}`);
+    setShowCustomAircraftModal(false);
+    
+    // Reset form
+    setCustomAircraftForm({
+      name: '',
+      emptyWeight: 1680,
+      emptyArm: 39.0,
+      maxGross: 2550,
+      fuelArm: 48.0,
+      fuelCapacity: 53,
+      fuelWeight: 6.0,
+      stations: [
+        { name: 'Pilot & Front Pax', arm: 37.0, maxWeight: 400 },
+        { name: 'Rear Passengers', arm: 73.0, maxWeight: 400 },
+        { name: 'Baggage', arm: 95.0, maxWeight: 120 },
+      ],
+      envelope: {
+        points: [
+          { weight: 1500, cgMin: 35.0, cgMax: 47.3 },
+          { weight: 2550, cgMin: 41.0, cgMax: 47.3 },
+        ]
+      }
+    });
+  }, [customAircraftForm]);
+
+  const handleDeleteCustomAircraft = useCallback((name: string) => {
+    if (confirm(`Delete custom aircraft "${name}"?`)) {
+      deleteCustomAircraft(name);
+      setCustomAircraftList(getCustomAircraft());
+      if (selectedAircraft === `custom-${name}`) {
+        setSelectedAircraft('C172S');
+      }
+    }
+  }, [selectedAircraft]);
+
+  // Import/Export handlers
+  const handleExport = useCallback(() => {
+    const json = exportProfiles();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'avweather-profiles.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleImport = useCallback(() => {
+    const result = importProfiles(importText);
+    if (result.success) {
+      setProfiles(getProfiles());
+      setShowImportExportModal(false);
+      setImportText('');
+      alert(`Successfully imported ${result.imported} profile(s)`);
+    } else {
+      alert(`Import failed: ${result.error}`);
+    }
+  }, [importText]);
+
   // Calculate totals
   const calculations = useMemo(() => {
     if (stationWeights.length === 0) return null;
@@ -150,8 +391,8 @@ export default function WeightBalance() {
     // Stations
     const stationMoments = stationWeights.map((s, i) => ({
       weight: s.weight,
-      arm: aircraft.stations[i].arm,
-      moment: s.weight * aircraft.stations[i].arm
+      arm: aircraft.stations[i]?.arm || 0,
+      moment: s.weight * (aircraft.stations[i]?.arm || 0)
     }));
 
     const totalStationWeight = stationMoments.reduce((sum, s) => sum + s.weight, 0);
@@ -275,18 +516,81 @@ export default function WeightBalance() {
 
   return (
     <div className="space-y-6">
+      {/* Profile Quick Actions */}
+      <div className="flex flex-wrap gap-2">
+        <select
+          value={selectedProfile}
+          onChange={(e) => handleLoadProfile(e.target.value)}
+          className="flex-1 min-w-[140px] bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">Load Profile...</option>
+          {profiles.map(profile => (
+            <option key={profile.id} value={profile.id}>
+              {profile.name}
+            </option>
+          ))}
+        </select>
+        
+        <button
+          onClick={() => {
+            setProfileName('');
+            setEditingProfileId(null);
+            setShowSaveModal(true);
+          }}
+          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+          </svg>
+          Save
+        </button>
+        
+        <button
+          onClick={() => setShowManageModal(true)}
+          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+        >
+          Manage
+        </button>
+      </div>
+
       {/* Aircraft Selection */}
       <div>
         <label className="block text-sm font-medium text-slate-400 mb-2">Aircraft Type</label>
-        <select
-          value={selectedAircraft}
-          onChange={(e) => setSelectedAircraft(e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          {Object.entries(AIRCRAFT_DATABASE).map(([id, data]) => (
-            <option key={id} value={id}>{data.name}</option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select
+            value={selectedAircraft}
+            onChange={(e) => {
+              setSelectedAircraft(e.target.value);
+              setSelectedProfile('');
+            }}
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <optgroup label="Standard Aircraft">
+              {Object.entries(AIRCRAFT_DATABASE).map(([id, data]) => (
+                <option key={id} value={id}>{data.name}</option>
+              ))}
+            </optgroup>
+            {customAircraftList.length > 0 && (
+              <optgroup label="Custom Aircraft">
+                {customAircraftList.map(custom => (
+                  <option key={custom.name} value={`custom-${custom.name}`}>
+                    {custom.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          
+          <button
+            onClick={() => setShowCustomAircraftModal(true)}
+            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            title="Add Custom Aircraft"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Fuel Input */}
@@ -363,7 +667,7 @@ export default function WeightBalance() {
                 </tr>
                 {calculations.stationMoments.map((s, i) => (
                   <tr key={i}>
-                    <td className="px-4 py-2">{aircraft.stations[i].name}</td>
+                    <td className="px-4 py-2">{aircraft.stations[i]?.name || `Station ${i+1}`}</td>
                     <td className="text-right px-4 py-2">{s.weight}</td>
                     <td className="text-right px-4 py-2">{s.arm.toFixed(1)}</td>
                     <td className="text-right px-4 py-2">{s.moment.toFixed(0)}</td>
@@ -416,6 +720,427 @@ export default function WeightBalance() {
           </div>
         </div>
       )}
+
+      {/* Save Profile Modal */}
+      <Modal
+        isOpen={showSaveModal}
+        onClose={() => {
+          setShowSaveModal(false);
+          setProfileName('');
+          setEditingProfileId(null);
+        }}
+        title={editingProfileId ? 'Edit Profile' : 'Save Profile'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-2">Profile Name</label>
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="e.g., Solo Training, Full Pax, Checkride"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              autoFocus
+            />
+          </div>
+          
+          <div className="text-sm text-slate-400 space-y-1">
+            <p><strong>Aircraft:</strong> {aircraft.name}</p>
+            <p><strong>Fuel:</strong> {fuelGallons} gallons</p>
+            <p><strong>Total Weight:</strong> {calculations?.totalWeight.toFixed(0)} lbs</p>
+          </div>
+          
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => {
+                setShowSaveModal(false);
+                setProfileName('');
+                setEditingProfileId(null);
+              }}
+              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveProfile}
+              disabled={!profileName.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              {editingProfileId ? 'Update' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Manage Profiles Modal */}
+      <Modal
+        isOpen={showManageModal}
+        onClose={() => setShowManageModal(false)}
+        title="Manage Profiles"
+      >
+        <div className="space-y-4">
+          {profiles.length === 0 ? (
+            <p className="text-slate-400 text-center py-8">No saved profiles yet</p>
+          ) : (
+            <div className="space-y-2">
+              {profiles.map(profile => (
+                <div
+                  key={profile.id}
+                  className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium text-white">{profile.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {profile.customAircraft?.name || AIRCRAFT_DATABASE[profile.aircraftType]?.name || profile.aircraftType} • {profile.fuelGallons}gal
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        handleLoadProfile(profile.id);
+                        setShowManageModal(false);
+                      }}
+                      className="p-2 text-blue-400 hover:bg-slate-600 rounded transition-colors"
+                      title="Load"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleEditProfile(profile)}
+                      className="p-2 text-slate-400 hover:bg-slate-600 rounded transition-colors"
+                      title="Edit"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProfile(profile.id)}
+                      className="p-2 text-red-400 hover:bg-slate-600 rounded transition-colors"
+                      title="Delete"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex gap-2 pt-2 border-t border-slate-700">
+            <button
+              onClick={() => {
+                setShowManageModal(false);
+                setShowImportExportModal(true);
+              }}
+              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors text-sm"
+            >
+              Import/Export
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Import/Export Modal */}
+      <Modal
+        isOpen={showImportExportModal}
+        onClose={() => {
+          setShowImportExportModal(false);
+          setImportText('');
+        }}
+        title="Import/Export Profiles"
+      >
+        <div className="space-y-4">
+          <div>
+            <button
+              onClick={handleExport}
+              className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export All Profiles
+            </button>
+          </div>
+          
+          <div className="border-t border-slate-700 pt-4">
+            <label className="block text-sm font-medium text-slate-400 mb-2">Import JSON</label>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder="Paste exported JSON here..."
+              className="w-full h-32 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <button
+              onClick={handleImport}
+              disabled={!importText.trim()}
+              className="w-full mt-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              Import Profiles
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Custom Aircraft Modal */}
+      <Modal
+        isOpen={showCustomAircraftModal}
+        onClose={() => setShowCustomAircraftModal(false)}
+        title="Add Custom Aircraft"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-400 mb-1">Aircraft Name</label>
+            <input
+              type="text"
+              value={customAircraftForm.name}
+              onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, name: e.target.value })}
+              placeholder="e.g., N12345 (My C172)"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Empty Weight (lbs)</label>
+              <input
+                type="number"
+                value={customAircraftForm.emptyWeight}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyWeight: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Empty Arm (in)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customAircraftForm.emptyArm}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyArm: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Max Gross (lbs)</label>
+              <input
+                type="number"
+                value={customAircraftForm.maxGross}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, maxGross: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Capacity (gal)</label>
+              <input
+                type="number"
+                value={customAircraftForm.fuelCapacity}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelCapacity: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Arm (in)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customAircraftForm.fuelArm}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelArm: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Weight (lb/gal)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customAircraftForm.fuelWeight}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelWeight: Number(e.target.value) })}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+          </div>
+          
+          <div className="border-t border-slate-700 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-400">Stations</label>
+              <button
+                onClick={() => setCustomAircraftForm({
+                  ...customAircraftForm,
+                  stations: [...customAircraftForm.stations, { name: 'New Station', arm: 50, maxWeight: 200 }]
+                })}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                + Add Station
+              </button>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {customAircraftForm.stations.map((station, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={station.name}
+                    onChange={(e) => {
+                      const newStations = [...customAircraftForm.stations];
+                      newStations[i] = { ...newStations[i], name: e.target.value };
+                      setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
+                    }}
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Name"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={station.arm}
+                    onChange={(e) => {
+                      const newStations = [...customAircraftForm.stations];
+                      newStations[i] = { ...newStations[i], arm: Number(e.target.value) };
+                      setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
+                    }}
+                    className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Arm"
+                  />
+                  <input
+                    type="number"
+                    value={station.maxWeight || 200}
+                    onChange={(e) => {
+                      const newStations = [...customAircraftForm.stations];
+                      newStations[i] = { ...newStations[i], maxWeight: Number(e.target.value) };
+                      setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
+                    }}
+                    className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Max"
+                  />
+                  {customAircraftForm.stations.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const newStations = customAircraftForm.stations.filter((_, idx) => idx !== i);
+                        setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
+                      }}
+                      className="text-red-400 hover:text-red-300 p-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="border-t border-slate-700 pt-3">
+            <label className="text-sm font-medium text-slate-400 mb-2 block">CG Envelope (Forward/Aft Limits)</label>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {customAircraftForm.envelope.points.map((point, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    value={point.weight}
+                    onChange={(e) => {
+                      const newPoints = [...customAircraftForm.envelope.points];
+                      newPoints[i] = { ...newPoints[i], weight: Number(e.target.value) };
+                      setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
+                    }}
+                    className="w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Weight"
+                  />
+                  <span className="text-slate-500 text-xs">lbs @</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={point.cgMin}
+                    onChange={(e) => {
+                      const newPoints = [...customAircraftForm.envelope.points];
+                      newPoints[i] = { ...newPoints[i], cgMin: Number(e.target.value) };
+                      setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
+                    }}
+                    className="w-14 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Fwd"
+                  />
+                  <span className="text-slate-500 text-xs">-</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={point.cgMax}
+                    onChange={(e) => {
+                      const newPoints = [...customAircraftForm.envelope.points];
+                      newPoints[i] = { ...newPoints[i], cgMax: Number(e.target.value) };
+                      setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
+                    }}
+                    className="w-14 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
+                    placeholder="Aft"
+                  />
+                  <span className="text-slate-500 text-xs">in</span>
+                  {customAircraftForm.envelope.points.length > 2 && (
+                    <button
+                      onClick={() => {
+                        const newPoints = customAircraftForm.envelope.points.filter((_, idx) => idx !== i);
+                        setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
+                      }}
+                      className="text-red-400 hover:text-red-300 p-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => setCustomAircraftForm({
+                  ...customAircraftForm,
+                  envelope: {
+                    points: [...customAircraftForm.envelope.points, { weight: 2000, cgMin: 35, cgMax: 47 }]
+                  }
+                })}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                + Add Point
+              </button>
+            </div>
+          </div>
+          
+          {/* Custom aircraft delete list */}
+          {customAircraftList.length > 0 && (
+            <div className="border-t border-slate-700 pt-3">
+              <label className="text-sm font-medium text-slate-400 mb-2 block">Saved Custom Aircraft</label>
+              <div className="space-y-1">
+                {customAircraftList.map(ac => (
+                  <div key={ac.name} className="flex items-center justify-between p-2 bg-slate-700/50 rounded">
+                    <span className="text-sm text-white">{ac.name}</span>
+                    <button
+                      onClick={() => handleDeleteCustomAircraft(ac.name)}
+                      className="text-red-400 hover:text-red-300 text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => setShowCustomAircraftModal(false)}
+              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveCustomAircraft}
+              disabled={!customAircraftForm.name.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              Save Aircraft
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
