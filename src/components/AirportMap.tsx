@@ -8,6 +8,7 @@ import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature
 import FlightMarkers, { FlightData } from './FlightMarkers';
 import TFRLayer from './TFRLayer';
 import WeatherRadarLayer from './WeatherRadarLayer';
+import AirspaceLayer from './AirspaceLayer';
 import 'leaflet/dist/leaflet.css';
 
 interface AirportMapProps {
@@ -23,6 +24,7 @@ interface AirportMapProps {
   showFlights?: boolean;
   showTFRs?: boolean;
   showRadar?: boolean;
+  showAirspace?: boolean;
 }
 
 // Custom icon for user location
@@ -356,6 +358,7 @@ export default function AirportMap({
   showFlights = false,
   showTFRs = false,
   showRadar = false,
+  showAirspace = false,
 }: AirportMapProps) {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number>(0);
@@ -569,6 +572,9 @@ export default function AirportMap({
       
       {/* Weather Radar Layer */}
       <WeatherRadarLayer visible={showRadar} />
+      
+      {/* Airspace Layer */}
+      <AirspaceLayer visible={showAirspace} />
     </MapContainer>
   );
 }

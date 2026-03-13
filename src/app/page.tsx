@@ -48,6 +48,9 @@ export default function Home() {
   
   // Weather radar state
   const [showRadar, setShowRadar] = useState(false);
+  
+  // Airspace state
+  const [showAirspace, setShowAirspace] = useState(false);
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({
@@ -289,6 +292,17 @@ export default function Home() {
             </svg>
           </button>
 
+          {/* Airspace Toggle */}
+          <button
+            onClick={() => setShowAirspace(!showAirspace)}
+            className={`p-2 rounded-lg transition-colors ${showAirspace ? 'bg-purple-600 text-white' : 'hover:bg-slate-800'}`}
+            title={showAirspace ? 'Hide Airspace' : 'Show Airspace'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+          </button>
+
           {/* Tools Link */}
           <Link
             href="/tools"
@@ -517,6 +531,7 @@ export default function Home() {
           showFlights={showFlights}
           showTFRs={showTFRs}
           showRadar={showRadar}
+          showAirspace={showAirspace}
         />
         
         {/* Mobile airport count badge */}
