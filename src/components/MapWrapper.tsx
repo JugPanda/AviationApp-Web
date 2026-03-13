@@ -29,6 +29,7 @@ interface MapWrapperProps {
   trackedFlight?: string | null;
   onFlightSelect?: (flight: FlightData) => void;
   showFlights?: boolean;
+  showTFRs?: boolean;
 }
 
 export default function MapWrapper({ 
@@ -40,6 +41,7 @@ export default function MapWrapper({
   trackedFlight = null,
   onFlightSelect,
   showFlights = false,
+  showTFRs = false,
 }: MapWrapperProps) {
   return (
     <ErrorBoundary>
@@ -52,6 +54,7 @@ export default function MapWrapper({
         trackedFlight={trackedFlight}
         onFlightSelect={onFlightSelect}
         showFlights={showFlights}
+        showTFRs={showTFRs}
       />
     </ErrorBoundary>
   );

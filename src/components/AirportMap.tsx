@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { MetarData } from '@/types';
 import { getFlightCategoryColor, formatVisibility, formatWind, formatTemperature, formatAltimeter, formatObsTime } from '@/lib/utils';
 import FlightMarkers, { FlightData } from './FlightMarkers';
+import TFRLayer from './TFRLayer';
 import 'leaflet/dist/leaflet.css';
 
 interface AirportMapProps {
@@ -19,6 +20,7 @@ interface AirportMapProps {
   trackedFlight?: string | null;
   onFlightSelect?: (flight: FlightData) => void;
   showFlights?: boolean;
+  showTFRs?: boolean;
 }
 
 // Custom icon for user location
@@ -350,6 +352,7 @@ export default function AirportMap({
   trackedFlight = null,
   onFlightSelect,
   showFlights = false,
+  showTFRs = false,
 }: AirportMapProps) {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number>(0);
@@ -557,6 +560,9 @@ export default function AirportMap({
           onFlightSelect={onFlightSelect} 
         />
       )}
+      
+      {/* TFR Layer */}
+      <TFRLayer visible={showTFRs} />
     </MapContainer>
   );
 }
