@@ -51,6 +51,9 @@ export default function Home() {
   
   // Airspace state
   const [showAirspace, setShowAirspace] = useState(false);
+  
+  // PIREPs & SIGMETs state
+  const [showHazards, setShowHazards] = useState(false);
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({
@@ -303,6 +306,17 @@ export default function Home() {
             </svg>
           </button>
 
+          {/* PIREPs & SIGMETs Toggle */}
+          <button
+            onClick={() => setShowHazards(!showHazards)}
+            className={`p-2 rounded-lg transition-colors ${showHazards ? 'bg-orange-600 text-white' : 'hover:bg-slate-800'}`}
+            title={showHazards ? 'Hide PIREPs/SIGMETs' : 'Show PIREPs/SIGMETs'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </button>
+
           {/* Tools Link */}
           <Link
             href="/tools"
@@ -532,6 +546,7 @@ export default function Home() {
           showTFRs={showTFRs}
           showRadar={showRadar}
           showAirspace={showAirspace}
+          showHazards={showHazards}
         />
         
         {/* Mobile airport count badge */}

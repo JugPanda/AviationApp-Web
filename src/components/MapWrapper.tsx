@@ -32,6 +32,7 @@ interface MapWrapperProps {
   showTFRs?: boolean;
   showRadar?: boolean;
   showAirspace?: boolean;
+  showHazards?: boolean;
 }
 
 export default function MapWrapper({ 
@@ -46,6 +47,7 @@ export default function MapWrapper({
   showTFRs = false,
   showRadar = false,
   showAirspace = false,
+  showHazards = false,
 }: MapWrapperProps) {
   return (
     <ErrorBoundary>
@@ -61,6 +63,7 @@ export default function MapWrapper({
         showTFRs={showTFRs}
         showRadar={showRadar}
         showAirspace={showAirspace}
+        showHazards={showHazards}
       />
     </ErrorBoundary>
   );
