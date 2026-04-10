@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 
 interface FlightEntry {
@@ -73,15 +73,12 @@ function generateId(): string {
 }
 
 export default function LogbookPage() {
-  const [entries, setEntries] = useState<FlightEntry[]>([]);
+  const [entries, setEntries] = useState<FlightEntry[]>(() => getEntries());
   const [view, setView] = useState<'list' | 'add' | 'currency' | 'totals'>('list');
   const [editingEntry, setEditingEntry] = useState<FlightEntry | null>(null);
   const [sortField, setSortField] = useState<'date' | 'totalTime'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  useEffect(() => {
-    setEntries(getEntries());
-  }, []);
 
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {

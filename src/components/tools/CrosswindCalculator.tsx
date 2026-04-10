@@ -2,70 +2,23 @@
 
 import { useState, useMemo } from 'react';
 
+import { calculateCrosswind } from '@/lib/crosswind';
+
 export default function CrosswindCalculator() {
   const [runwayHeading, setRunwayHeading] = useState(270);
   const [windDirection, setWindDirection] = useState(300);
   const [windSpeed, setWindSpeed] = useState(15);
   const [gustSpeed, setGustSpeed] = useState<number | ''>('');
 
-  const calculations = useMemo(() => {
-    // Calculate the angle between wind and runway
-    let angleDiff = windDirection - runwayHeading;
-    
-    // Normalize to -180 to 180
-    while (angleDiff > 180) angleDiff -= 360;
-    while (angleDiff < -180) angleDiff += 360;
-
-    const angleRad = Math.abs(angleDiff) * (Math.PI / 180);
-
-    // Crosswind = Wind Speed × sin(angle)
-    // Headwind = Wind Speed × cos(angle)
-    const crosswind = Math.abs(windSpeed * Math.sin(angleRad));
-    const headwindComponent = windSpeed * Math.cos(angleRad);
-    
-    // Determine if headwind or tailwind
-    const isHeadwind = Math.abs(angleDiff) <= 90;
-    const headwind = isHeadwind ? headwindComponent : 0;
-    const tailwind = isHeadwind ? 0 : Math.abs(headwindComponent);
-
-    // Gust calculations
-    let gustCrosswind = 0;
-    let gustHeadwind = 0;
-    let gustTailwind = 0;
-    if (gustSpeed !== '' && gustSpeed > windSpeed) {
-      gustCrosswind = Math.abs(gustSpeed * Math.sin(angleRad));
-      const gustHeadwindComponent = gustSpeed * Math.cos(angleRad);
-      gustHeadwind = isHeadwind ? gustHeadwindComponent : 0;
-      gustTailwind = isHeadwind ? 0 : Math.abs(gustHeadwindComponent);
-    }
-
-    // Crosswind limit assessment (common limits)
-    const limits = {
-      student: 7,
-      private: 12,
-      commercial: 15,
-      transport: 20,
-    };
-
-    const maxCrosswind = gustSpeed !== '' ? gustCrosswind : crosswind;
-
-    return {
-      angleDiff,
-      crosswind: Math.round(crosswind * 10) / 10,
-      headwind: Math.round(headwind * 10) / 10,
-      tailwind: Math.round(tailwind * 10) / 10,
-      gustCrosswind: Math.round(gustCrosswind * 10) / 10,
-      gustHeadwind: Math.round(gustHeadwind * 10) / 10,
-      gustTailwind: Math.round(gustTailwind * 10) / 10,
-      isHeadwind,
-      windFromLeft: angleDiff > 0,
-      limits,
-      maxCrosswind,
-      exceedsStudent: maxCrosswind > limits.student,
-      exceedsPrivate: maxCrosswind > limits.private,
-      exceedsCommercial: maxCrosswind > limits.commercial,
-    };
-  }, [runwayHeading, windDirection, windSpeed, gustSpeed]);
+  const calculations = useMemo(
+    () => calculateCrosswind({
+      runwayHeading,
+      windDirection,
+      windSpeed,
+      gustSpeed: gustSpeed === '' ? null : gustSpeed,
+    }),
+    [runwayHeading, windDirection, windSpeed, gustSpeed]
+  );
 
   // Visual runway/wind diagram
   const WindDiagram = () => {
@@ -256,7 +209,7 @@ export default function CrosswindCalculator() {
           <p className="text-xs text-slate-500">
             knots from {calculations.windFromLeft ? 'left' : 'right'}
           </p>
-          {gustSpeed !== '' && calculations.gustCrosswind > calculations.crosswind && (
+          {calculations.effectiveGustSpeed !== null && calculations.gustCrosswind > calculations.crosswind && (
             <p className="text-xs text-orange-400 mt-1">
               G{calculations.gustCrosswind}kt
             </p>
@@ -271,7 +224,7 @@ export default function CrosswindCalculator() {
             {calculations.isHeadwind ? calculations.headwind : calculations.tailwind}
           </p>
           <p className="text-xs text-slate-500">knots</p>
-          {gustSpeed !== '' && (
+          {calculations.effectiveGustSpeed !== null && (
             <p className="text-xs text-orange-400 mt-1">
               G{calculations.isHeadwind ? calculations.gustHeadwind : calculations.gustTailwind}kt
             </p>
@@ -304,7 +257,7 @@ export default function CrosswindCalculator() {
       <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
         <h4 className="text-sm font-medium text-blue-400 mb-2">💡 METAR Wind Format</h4>
         <p className="text-sm text-slate-300">
-          <code className="bg-slate-800 px-2 py-1 rounded">{String(windDirection).padStart(3, '0')}{String(windSpeed).padStart(2, '0')}{gustSpeed !== '' ? `G${String(gustSpeed).padStart(2, '0')}` : ''}KT</code>
+          <code className="bg-slate-800 px-2 py-1 rounded">{String(windDirection).padStart(3, '0')}{String(windSpeed).padStart(2, '0')}{calculations.effectiveGustSpeed !== null ? `G${String(calculations.effectiveGustSpeed).padStart(2, '0')}` : ''}KT</code>
         </p>
         <p className="text-xs text-slate-500 mt-2">
           Example: 30015G25KT = Wind from 300° at 15kt gusting 25kt

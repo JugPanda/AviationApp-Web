@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 
 interface Waypoint {
@@ -69,15 +69,12 @@ export default function PlanPage() {
   const [magneticVariation, setMagneticVariation] = useState<number>(0);
   
   // Saved plans
-  const [savedPlans, setSavedPlans] = useState<FlightPlan[]>([]);
+  const [savedPlans, setSavedPlans] = useState<FlightPlan[]>(() => getPlans());
   const [planName, setPlanName] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [showPrintView, setShowPrintView] = useState(false);
   
-  useEffect(() => {
-    setSavedPlans(getPlans());
-  }, []);
 
   const addWaypoint = useCallback(() => {
     setWaypoints(prev => [...prev, {
@@ -103,11 +100,7 @@ export default function PlanPage() {
 
   // Calculate all legs
   const legs: LegResult[] = useMemo(() => {
-    let cumulativeDistance = 0;
-    let cumulativeTime = 0;
-    let cumulativeFuel = 0;
-
-    return waypoints.filter(w => w.distance > 0).map((waypoint) => {
+    return waypoints.filter(w => w.distance > 0).reduce<LegResult[]>((results, waypoint) => {
       // Wind correction calculation
       const tcRad = (waypoint.trueCourse * Math.PI) / 180;
       const wdRad = (waypoint.windDirection * Math.PI) / 180;
@@ -124,12 +117,12 @@ export default function PlanPage() {
       // Time and fuel
       const ete = (waypoint.distance / groundSpeed) * 60; // minutes
       const fuelBurn = (ete / 60) * fuelBurnRate;
+      const previousLeg = results[results.length - 1];
+      const cumulativeDistance = (previousLeg?.cumulativeDistance ?? 0) + waypoint.distance;
+      const cumulativeTime = (previousLeg?.cumulativeTime ?? 0) + ete;
+      const cumulativeFuel = (previousLeg?.cumulativeFuel ?? 0) + fuelBurn;
       
-      cumulativeDistance += waypoint.distance;
-      cumulativeTime += ete;
-      cumulativeFuel += fuelBurn;
-      
-      return {
+      results.push({
         waypoint,
         trueHeading: normalizeHeading(trueHeading),
         groundSpeed: Math.round(groundSpeed),
@@ -139,8 +132,10 @@ export default function PlanPage() {
         cumulativeDistance,
         cumulativeTime: Math.round(cumulativeTime * 10) / 10,
         cumulativeFuel: Math.round(cumulativeFuel * 10) / 10
-      };
-    });
+      });
+
+      return results;
+    }, []);
   }, [waypoints, tas, fuelBurnRate]);
 
   // Totals
