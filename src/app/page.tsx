@@ -8,6 +8,7 @@ import AirportInfo from '@/components/AirportInfo';
 import FlightInfo from '@/components/FlightInfo';
 import { FlightData } from '@/components/FlightMarkers';
 import { MetarData } from '@/types';
+import { findBestTrackedFlight, getTrackedRefreshQuery, isFlightTracked, normalizeFlightIdentifier } from '@/lib/flight-tracking';
 import { getFlightCategoryColor } from '@/lib/utils';
 import { US_STATES, US_REGIONS } from '@/lib/airports';
 
@@ -39,8 +40,10 @@ export default function Home() {
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<FlightData | null>(null);
   const [trackedFlight, setTrackedFlight] = useState<string | null>(null);
+  const [trackedFlightQuery, setTrackedFlightQuery] = useState<string | null>(null);
   const [flightSearch, setFlightSearch] = useState('');
   const [flightsLoading, setFlightsLoading] = useState(false);
+  const [flightSearchSummary, setFlightSearchSummary] = useState<string | null>(null);
   
   // Map layer toggles
   const [showTFRs, setShowTFRs] = useState(false);
@@ -109,12 +112,17 @@ export default function Home() {
     setFlightsLoading(true);
     try {
       let url = '/api/flights?bounds=24.396308,49.384358,-125.0,-66.93457';
-      if (callsign) url = `/api/flights?callsign=${callsign}`;
+      if (callsign) url = `/api/flights?callsign=${encodeURIComponent(callsign)}`;
       const res = await fetch(url);
       const data = await res.json();
-      if (Array.isArray(data)) setFlights(data);
+      if (Array.isArray(data)) {
+        setFlights(data);
+        return data as FlightData[];
+      }
+      return [] as FlightData[];
     } catch (err) {
       console.error('Failed to fetch flights:', err);
+      return [] as FlightData[];
     } finally {
       setFlightsLoading(false);
     }
@@ -122,18 +130,32 @@ export default function Home() {
 
   useEffect(() => {
     if (showFlights) {
-      fetchFlights();
-      const interval = setInterval(() => fetchFlights(), 15000);
+      const refreshQuery = trackedFlightQuery ?? undefined;
+      fetchFlights(refreshQuery);
+      const interval = setInterval(() => fetchFlights(refreshQuery), 15000);
       return () => clearInterval(interval);
     }
-  }, [showFlights, fetchFlights]);
+  }, [showFlights, fetchFlights, trackedFlightQuery]);
 
-  const handleFlightSearch = (e: React.FormEvent) => {
+  const handleFlightSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (flightSearch.trim()) {
-      fetchFlights(flightSearch.trim());
-      setTrackedFlight(flightSearch.trim().toUpperCase());
+    const query = normalizeFlightIdentifier(flightSearch);
+    if (!query) {
+      return;
     }
+
+    const results = await fetchFlights(query);
+    const bestMatch = findBestTrackedFlight(query, results);
+
+    setTrackedFlightQuery(query);
+    setTrackedFlight(bestMatch ? bestMatch.icao24 : null);
+    setSelectedFlight(bestMatch);
+    setSelectedAirport(null);
+    setFlightSearchSummary(
+      bestMatch
+        ? `Tracking ${normalizeFlightIdentifier(bestMatch.callsign) || bestMatch.icao24} • ${results.length} match${results.length === 1 ? '' : 'es'}`
+        : `No live flight match found for ${query}`
+    );
   };
 
   const handleFlightSelect = (flight: FlightData) => {
@@ -141,8 +163,30 @@ export default function Home() {
     setSelectedAirport(null);
   };
 
-  const handleTrackFlight = (callsign: string) => {
-    setTrackedFlight(trackedFlight === callsign ? null : callsign);
+  const handleTrackFlight = async (flightId: string) => {
+    if (trackedFlight === flightId) {
+      setTrackedFlight(null);
+      setTrackedFlightQuery(null);
+      setFlightSearchSummary(null);
+      if (showFlights) {
+        await fetchFlights();
+      }
+      return;
+    }
+
+    const selected = flights.find((flight) => normalizeFlightIdentifier(flight.icao24) === normalizeFlightIdentifier(flightId)) ?? null;
+    setTrackedFlight(flightId);
+    setTrackedFlightQuery(getTrackedRefreshQuery(selected));
+    setFlightSearchSummary(
+      selected
+        ? `Tracking ${normalizeFlightIdentifier(selected.callsign) || selected.icao24}`
+        : 'Tracking selected flight'
+    );
+
+    if (selected) {
+      setSelectedFlight(selected);
+      await fetchFlights(getTrackedRefreshQuery(selected) ?? undefined);
+    }
   };
 
   const handleSearch = (icao: string) => fetchAirports(icao, true);
@@ -312,8 +356,23 @@ export default function Home() {
               </button>
             </form>
             {trackedFlight && (
-              <button onClick={() => setTrackedFlight(null)} className="text-xs text-slate-400 hover:text-white shrink-0">✕</button>
+              <button
+                onClick={async () => {
+                  setTrackedFlight(null);
+                  setTrackedFlightQuery(null);
+                  setFlightSearchSummary(null);
+                  await fetchFlights();
+                }}
+                className="text-xs text-slate-400 hover:text-white shrink-0"
+              >
+                ✕
+              </button>
             )}
+          </div>
+        )}
+        {showFlights && flightSearchSummary && (
+          <div className="mt-2 text-xs text-slate-400">
+            {flightSearchSummary}
           </div>
         )}
 
@@ -680,7 +739,7 @@ export default function Home() {
               flight={selectedFlight} 
               onClose={() => setSelectedFlight(null)}
               onTrack={handleTrackFlight}
-              isTracking={trackedFlight === selectedFlight.callsign}
+              isTracking={isFlightTracked(selectedFlight, trackedFlight)}
             />
           </div>
         </>

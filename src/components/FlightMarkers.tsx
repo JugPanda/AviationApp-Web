@@ -3,6 +3,7 @@
 import { Marker, Popup, useMap } from 'react-leaflet';
 import { useEffect, useMemo } from 'react';
 import L from 'leaflet';
+import { isFlightTracked } from '@/lib/flight-tracking';
 
 export interface FlightData {
   icao24: string;
@@ -57,9 +58,9 @@ export default function FlightMarkers({ flights, trackedFlight, onFlightSelect }
   // Auto-center on tracked flight
   useEffect(() => {
     if (trackedFlight) {
-      const flight = flights.find(f => f.callsign === trackedFlight || f.icao24 === trackedFlight);
+      const flight = flights.find((candidate) => isFlightTracked(candidate, trackedFlight));
       if (flight) {
-        map.setView([flight.latitude, flight.longitude], map.getZoom(), { animate: true });
+        map.setView([flight.latitude, flight.longitude], Math.max(map.getZoom(), 7), { animate: true });
       }
     }
   }, [trackedFlight, flights, map]);
@@ -67,8 +68,8 @@ export default function FlightMarkers({ flights, trackedFlight, onFlightSelect }
   const sortedFlights = useMemo(() => {
     // Put tracked flight last so it renders on top
     return [...flights].sort((a, b) => {
-      const aTracked = a.callsign === trackedFlight || a.icao24 === trackedFlight;
-      const bTracked = b.callsign === trackedFlight || b.icao24 === trackedFlight;
+      const aTracked = isFlightTracked(a, trackedFlight);
+      const bTracked = isFlightTracked(b, trackedFlight);
       return aTracked ? 1 : bTracked ? -1 : 0;
     });
   }, [flights, trackedFlight]);
@@ -76,7 +77,7 @@ export default function FlightMarkers({ flights, trackedFlight, onFlightSelect }
   return (
     <>
       {sortedFlights.map((flight) => {
-        const isTracked = flight.callsign === trackedFlight || flight.icao24 === trackedFlight;
+        const isTracked = isFlightTracked(flight, trackedFlight);
         
         return (
           <Marker

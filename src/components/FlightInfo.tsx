@@ -5,7 +5,7 @@ import { FlightData } from './FlightMarkers';
 interface FlightInfoProps {
   flight: FlightData;
   onClose: () => void;
-  onTrack: (callsign: string) => void;
+  onTrack: (flightId: string) => void;
   isTracking: boolean;
 }
 
@@ -44,7 +44,7 @@ export default function FlightInfo({ flight, onClose, onTrack, isTracking }: Fli
         </div>
         
         <button
-          onClick={() => onTrack(flight.callsign)}
+          onClick={() => onTrack(flight.icao24)}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             isTracking 
               ? 'bg-amber-600 text-white' 
