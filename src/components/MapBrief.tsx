@@ -6,6 +6,7 @@ interface MapBriefProps {
   trackedFlightLabel: string | null;
   lastUpdated: Date | null;
   flightsLoading?: boolean;
+  flightSearchSummary?: string | null;
 }
 
 function formatRelativeTime(lastUpdated: Date | null): string {
@@ -33,6 +34,7 @@ export default function MapBrief({
   trackedFlightLabel,
   lastUpdated,
   flightsLoading = false,
+  flightSearchSummary,
 }: MapBriefProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 pt-2">
@@ -42,6 +44,9 @@ export default function MapBrief({
       <BriefChip label="Layers" value={activeLayerCount > 0 ? `${activeLayerCount} active` : 'Map only'} />
       {(trackedFlightLabel || flightsLoading) && (
         <BriefChip label="Flights" value={flightsLoading ? 'Refreshing live track' : trackedFlightLabel ?? 'Enabled'} accent="amber" />
+      )}
+      {flightSearchSummary && (
+        <BriefChip label="Tracker" value={flightSearchSummary} accent="amber" />
       )}
     </div>
   );

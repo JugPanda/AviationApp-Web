@@ -88,6 +88,42 @@ function icaoToFaa(icao: string): string {
   return icao;
 }
 
+interface CachedBriefingPayload {
+  details?: AirportDetails | null;
+  taf?: TafData | null;
+  notams?: NotamData[];
+  notamNotice?: string | null;
+  cachedAt: number;
+}
+
+function getBriefingCacheKey(icaoId: string) {
+  return `avweather-briefing-${icaoId.toUpperCase()}`;
+}
+
+function loadCachedBriefing(icaoId: string): CachedBriefingPayload | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const saved = window.localStorage.getItem(getBriefingCacheKey(icaoId));
+    return saved ? JSON.parse(saved) as CachedBriefingPayload : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedBriefing(icaoId: string, next: Partial<CachedBriefingPayload>) {
+  if (typeof window === 'undefined') return;
+  const existing = loadCachedBriefing(icaoId);
+  const payload: CachedBriefingPayload = {
+    details: existing?.details ?? null,
+    taf: existing?.taf ?? null,
+    notams: existing?.notams ?? [],
+    notamNotice: existing?.notamNotice ?? null,
+    cachedAt: Date.now(),
+    ...next,
+  };
+  window.localStorage.setItem(getBriefingCacheKey(icaoId), JSON.stringify(payload));
+}
+
 export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   const [activeTab, setActiveTab] = useState<'weather' | 'taf' | 'notams' | 'info' | 'runways' | 'frequencies'>('weather');
   const [details, setDetails] = useState<AirportDetails | null>(null);
@@ -101,6 +137,18 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   
   useEffect(() => {
     if (!airport?.icaoId) return;
+
+    const cached = loadCachedBriefing(airport.icaoId);
+    if (cached?.details) {
+      setDetails(cached.details);
+    }
+    if (cached?.taf) {
+      setTafData(cached.taf);
+    }
+    if (cached?.notams) {
+      setNotams(cached.notams);
+      setNotamNotice(cached.notamNotice ?? null);
+    }
     
     setLoading(true);
     setError(null);
@@ -112,11 +160,14 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
       })
       .then(data => {
         setDetails(data);
+        saveCachedBriefing(airport.icaoId, { details: data });
         setLoading(false);
       })
       .catch(err => {
         console.error('Failed to load airport details:', err);
-        setError('Could not load airport details');
+        if (!cached?.details) {
+          setError('Could not load airport details');
+        }
         setLoading(false);
       });
   }, [airport?.icaoId]);
@@ -137,6 +188,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setTafData(data[0]);
+          saveCachedBriefing(airport.icaoId, { taf: data[0] });
         } else {
           setTafData(null);
         }
@@ -155,16 +207,20 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
     if (activeTab !== 'notams' || !airport?.icaoId) return;
 
     const loadNotams = async () => {
+      const cached = loadCachedBriefing(airport.icaoId);
       setNotamLoading(true);
       setNotamNotice(null);
       try {
         const res = await fetch(`/api/notam/${airport.icaoId}`);
         const data: NotamResponse = await res.json();
-        setNotams(Array.isArray(data?.notams) ? data.notams : []);
-        setNotamNotice(data?.unavailable ? (data.message ?? 'Live NOTAM source unavailable right now.') : null);
+        const nextNotams = Array.isArray(data?.notams) ? data.notams : [];
+        const nextNotice = data?.unavailable ? (data.message ?? 'Live NOTAM source unavailable right now.') : null;
+        setNotams(nextNotams);
+        setNotamNotice(nextNotice);
+        saveCachedBriefing(airport.icaoId, { notams: nextNotams, notamNotice: nextNotice });
       } catch {
-        setNotams([]);
-        setNotamNotice('Unable to load NOTAMs right now.');
+        setNotams(cached?.notams ?? []);
+        setNotamNotice(cached?.notams?.length ? 'Showing cached NOTAMs. Reconnect to refresh live data.' : 'Unable to load NOTAMs right now.');
       } finally {
         setNotamLoading(false);
       }

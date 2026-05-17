@@ -15,6 +15,23 @@ import { getFlightCategoryColor } from '@/lib/utils';
 import { US_STATES, US_REGIONS } from '@/lib/airports';
 
 const FLIGHT_CATEGORIES = ['VFR', 'MVFR', 'IFR', 'LIFR'] as const;
+const RECENT_BRIEFINGS_KEY = 'avweather-recent-briefings';
+
+function loadRecentBriefings(): MetarData[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const saved = window.localStorage.getItem(RECENT_BRIEFINGS_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentBriefings(briefings: MetarData[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(RECENT_BRIEFINGS_KEY, JSON.stringify(briefings.slice(0, 6)));
+}
 
 export default function Home() {
   const [airports, setAirports] = useState<MetarData[]>([]);
@@ -56,6 +73,8 @@ export default function Home() {
   // UI panels
   const [showLayers, setShowLayers] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [recentBriefings, setRecentBriefings] = useState<MetarData[]>(() => loadRecentBriefings());
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({ ...prev, [category]: !prev[category] }));
@@ -104,6 +123,15 @@ export default function Home() {
   }, [selectedStates, selectedRegion]);
 
   useEffect(() => { fetchAirports(); }, [selectedStates, selectedRegion, fetchAirports]);
+  useEffect(() => {
+    if (!selectedAirport?.icaoId) return;
+
+    setRecentBriefings(prev => {
+      const next = [selectedAirport, ...prev.filter((item) => item.icaoId !== selectedAirport.icaoId)].slice(0, 6);
+      saveRecentBriefings(next);
+      return next;
+    });
+  }, [selectedAirport]);
   useEffect(() => {
     const interval = setInterval(() => fetchAirports(), 5 * 60 * 1000);
     return () => clearInterval(interval);
@@ -451,21 +479,68 @@ export default function Home() {
             {lastUpdated && ` • ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
           </span>
         </div>
+          <div className="lg:hidden mt-3 space-y-2">
+            <MapBrief
+              scopeLabel={scopeLabel}
+              visibleCount={visibleCount}
+              totalCount={airports.length}
+              activeLayerCount={activeLayerCount}
+              trackedFlightLabel={trackedFlightLabel}
+              lastUpdated={lastUpdated}
+              flightsLoading={flightsLoading}
+              flightSearchSummary={flightSearchSummary}
+            />
+            <PwaStatus compact />
+          </div>
 
-        <MapBrief
-          scopeLabel={scopeLabel}
-          visibleCount={visibleCount}
-          totalCount={airports.length}
-          activeLayerCount={activeLayerCount}
-          trackedFlightLabel={trackedFlightLabel}
-          lastUpdated={lastUpdated}
-          flightsLoading={flightsLoading}
-        />
-        <PwaStatus />
+          {recentBriefings.length > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Recent briefings</span>
+                <span className="text-[11px] text-slate-500">Cached for quick reopen</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {recentBriefings.map((briefing) => (
+                  <button
+                    key={briefing.icaoId}
+                    onClick={() => setSelectedAirport(briefing)}
+                    className="shrink-0 rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-left hover:border-slate-500"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{briefing.icaoId}</span>
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                        style={{ backgroundColor: getFlightCategoryColor(briefing.fltCat ?? null) }}
+                      >
+                        {briefing.fltCat ?? 'N/A'}
+                      </span>
+                    </div>
+                    <div className="mt-1 max-w-[9rem] truncate text-xs text-slate-400">{briefing.name || 'Airport briefing'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
       </header>
 
-      {/* Click outside to close dropdowns */}
+      {/* Click outside to close desktop state dropdown */}
       {showStateDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowStateDropdown(false)} />}
+
+      <div className="hidden lg:block px-4 pt-3">
+        <div className="mx-auto max-w-6xl space-y-2">
+          <MapBrief
+            scopeLabel={scopeLabel}
+            visibleCount={visibleCount}
+            totalCount={airports.length}
+            activeLayerCount={activeLayerCount}
+            trackedFlightLabel={trackedFlightLabel}
+            lastUpdated={lastUpdated}
+            flightsLoading={flightsLoading}
+            flightSearchSummary={flightSearchSummary}
+          />
+          <PwaStatus />
+        </div>
+      </div>
 
       {/* Error banner */}
       {error && (
@@ -531,8 +606,8 @@ export default function Home() {
       </div>
 
       {/* ===== MOBILE BOTTOM NAV BAR ===== */}
-      <nav className="sm:hidden bg-slate-900/95 backdrop-blur-md border-t border-slate-700/50 px-2 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
-        <div className="flex justify-around">
+      <nav className="sm:hidden bg-slate-900/95 backdrop-blur-md border-t border-slate-700/50 px-1 py-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))]">
+        <div className="grid grid-cols-4 gap-1">
           <BottomNavItem 
             icon={
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -540,30 +615,28 @@ export default function Home() {
               </svg>
             }
             label="Map"
-            active={!showLayers && !showFiltersPanel}
-            onClick={() => { setShowLayers(false); setShowFiltersPanel(false); }}
+            active={!showLayers && !showFiltersPanel && !showQuickActions}
+            onClick={() => { setShowLayers(false); setShowFiltersPanel(false); setShowQuickActions(false); }}
           />
           <BottomNavItem 
             icon={
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z" />
               </svg>
             }
-            label="Filters"
-            active={showFiltersPanel}
-            badge={FLIGHT_CATEGORIES.filter(c => !filters[c]).length + (selectedRegion ? 1 : 0) + selectedStates.length}
-            onClick={() => { setShowFiltersPanel(!showFiltersPanel); setShowLayers(false); }}
+            label="Brief"
+            active={showQuickActions}
+            badge={activeLayerCount + FLIGHT_CATEGORIES.filter(c => !filters[c]).length + (selectedRegion ? 1 : 0) + selectedStates.length}
+            onClick={() => { setShowQuickActions(!showQuickActions); setShowLayers(false); setShowFiltersPanel(false); }}
           />
           <BottomNavItem 
             icon={
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
             }
-            label="Layers"
-            active={showLayers}
-            badge={activeLayerCount}
-            onClick={() => { setShowLayers(!showLayers); setShowFiltersPanel(false); }}
+            label="Plan"
+            href="/plan"
           />
           <BottomNavItem 
             icon={
@@ -572,36 +645,98 @@ export default function Home() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             }
-            label="Tools"
-            href="/tools"
-          />
-          <BottomNavItem 
-            icon={
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-              </svg>
-            }
             label="More"
-            onClick={() => {/* could open a sheet with Plan, Logbook, etc */}}
-            moreMenu={
-              <div className="absolute bottom-full right-0 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden w-48">
-                <Link href="/plan" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                  <span className="text-sm">Flight Plan</span>
-                </Link>
-                <Link href="/logbook" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-700 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span className="text-sm">Logbook</span>
-                </Link>
-              </div>
-            }
+            active={showLayers || showFiltersPanel}
+            badge={activeLayerCount + FLIGHT_CATEGORIES.filter(c => !filters[c]).length + (selectedRegion ? 1 : 0) + selectedStates.length}
+            onClick={() => {
+              if (showLayers || showFiltersPanel) {
+                setShowLayers(false);
+                setShowFiltersPanel(false);
+              } else {
+                setShowQuickActions(true);
+              }
+            }}
           />
         </div>
       </nav>
+
+      {showQuickActions && (
+        <>
+          <div className="sm:hidden fixed inset-0 bg-black/40 z-[999]" onClick={() => setShowQuickActions(false)} />
+          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto">
+            <div className="flex justify-center py-2">
+              <div className="w-10 h-1 bg-slate-600 rounded-full" />
+            </div>
+            <div className="px-4 pb-4 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Briefing workspace</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => { setShowQuickActions(false); setShowFiltersPanel(true); }}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
+                  >
+                    <div className="text-sm font-medium text-white">Filters</div>
+                    <div className="mt-1 text-xs text-slate-400">Region, states, flight categories</div>
+                  </button>
+                  <button
+                    onClick={() => { setShowQuickActions(false); setShowLayers(true); }}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
+                  >
+                    <div className="text-sm font-medium text-white">Layers</div>
+                    <div className="mt-1 text-xs text-slate-400">Flights, TFRs, radar, airspace</div>
+                  </button>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Other pages</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link
+                    href="/tools"
+                    onClick={() => setShowQuickActions(false)}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
+                  >
+                    <div className="text-sm font-medium text-white">Tools</div>
+                    <div className="mt-1 text-xs text-slate-400">Pilot calculators and references</div>
+                  </Link>
+                  <Link
+                    href="/logbook"
+                    onClick={() => setShowQuickActions(false)}
+                    className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
+                  >
+                    <div className="text-sm font-medium text-white">Logbook</div>
+                    <div className="mt-1 text-xs text-slate-400">Currency, totals, and recency</div>
+                  </Link>
+                </div>
+              </div>
+              {recentBriefings.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-semibold text-slate-400 uppercase tracking-wider">Recent cached briefings</div>
+                  <div className="space-y-2">
+                    {recentBriefings.slice(0, 4).map((briefing) => (
+                      <button
+                        key={briefing.icaoId}
+                        onClick={() => { setSelectedAirport(briefing); setShowQuickActions(false); }}
+                        className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
+                      >
+                        <div>
+                          <div className="text-sm font-semibold text-white">{briefing.icaoId}</div>
+                          <div className="text-xs text-slate-400 truncate">{briefing.name || 'Airport briefing'}</div>
+                        </div>
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                          style={{ backgroundColor: getFlightCategoryColor(briefing.fltCat ?? null) }}
+                        >
+                          {briefing.fltCat ?? 'N/A'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ===== MOBILE: Layers Sheet ===== */}
       {showLayers && (
@@ -809,16 +944,14 @@ function ToolbarButton({
 }
 
 function BottomNavItem({ 
-  icon, label, active, badge, onClick, href, moreMenu 
+  icon, label, active, badge, onClick, href 
 }: { 
   icon: React.ReactNode; label: string; active?: boolean; badge?: number; 
-  onClick?: () => void; href?: string; moreMenu?: React.ReactNode;
+  onClick?: () => void; href?: string;
 }) {
-  const [showMore, setShowMore] = useState(false);
-
   if (href) {
     return (
-      <Link href={href} className="flex flex-col items-center justify-center min-w-[3rem] py-1 relative">
+      <Link href={href} className="flex flex-1 min-w-0 flex-col items-center justify-center rounded-lg py-1 relative">
         <div className="text-slate-400">{icon}</div>
         <span className="text-[10px] text-slate-500 mt-0.5">{label}</span>
       </Link>
@@ -827,8 +960,8 @@ function BottomNavItem({
 
   return (
     <button 
-      onClick={moreMenu ? () => setShowMore(!showMore) : onClick}
-      className={`flex flex-col items-center justify-center min-w-[3rem] py-1 relative transition-colors ${
+      onClick={onClick}
+      className={`flex flex-1 min-w-0 flex-col items-center justify-center rounded-lg py-1 relative transition-colors ${
         active ? 'text-blue-400' : ''
       }`}
     >
@@ -841,13 +974,6 @@ function BottomNavItem({
         )}
       </div>
       <span className={`text-[10px] mt-0.5 ${active ? 'text-blue-400' : 'text-slate-500'}`}>{label}</span>
-      
-      {showMore && moreMenu && (
-        <>
-          <div className="fixed inset-0 z-[998]" onClick={(e) => { e.stopPropagation(); setShowMore(false); }} />
-          <div className="z-[999]">{moreMenu}</div>
-        </>
-      )}
     </button>
   );
 }

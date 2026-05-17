@@ -329,7 +329,7 @@ export default function PlanPage() {
     <main className="min-h-screen bg-slate-950 text-white pb-20">
       {/* Header */}
       <header className="bg-slate-900 border-b border-slate-700 px-4 py-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
           <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -342,7 +342,7 @@ export default function PlanPage() {
             <p className="text-xs text-slate-400 hidden sm:block">Flight planning & navigation log</p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2 sm:flex-nowrap">
             <button onClick={() => setShowLoadModal(true)} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
               Load
             </button>
@@ -354,7 +354,8 @@ export default function PlanPage() {
               disabled={legs.length === 0}
               className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg text-sm"
             >
-              🖨️ Print
+              <span className="sm:hidden">🖨️</span>
+              <span className="hidden sm:inline">🖨️ Print</span>
             </button>
           </div>
         </div>
@@ -453,11 +454,11 @@ export default function PlanPage() {
 
         {/* Waypoints */}
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
             <h3 className="text-sm font-medium text-slate-400">Waypoints / Legs</h3>
             <button
               onClick={addWaypoint}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+              className="w-full sm:w-auto px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
             >
               + Add Waypoint
             </button>
@@ -488,7 +489,7 @@ export default function PlanPage() {
                   {/* Mobile label */}
                   <div className="sm:hidden text-xs text-slate-400 mb-2">Leg {index + 1}</div>
                   
-                  <div className="grid grid-cols-4 sm:grid-cols-12 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-12 gap-2">
                     {/* Waypoint name */}
                     <div className="col-span-2">
                       <input

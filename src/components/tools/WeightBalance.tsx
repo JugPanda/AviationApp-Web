@@ -521,7 +521,7 @@ export default function WeightBalance() {
         <select
           value={selectedProfile}
           onChange={(e) => handleLoadProfile(e.target.value)}
-          className="flex-1 min-w-[140px] bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full sm:flex-1 sm:min-w-[140px] bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="">Load Profile...</option>
           {profiles.map(profile => (
@@ -537,7 +537,7 @@ export default function WeightBalance() {
             setEditingProfileId(null);
             setShowSaveModal(true);
           }}
-          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
+          className="flex-1 sm:flex-none justify-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -547,7 +547,7 @@ export default function WeightBalance() {
         
         <button
           onClick={() => setShowManageModal(true)}
-          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+          className="flex-1 sm:flex-none px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
         >
           Manage
         </button>

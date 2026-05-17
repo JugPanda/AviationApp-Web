@@ -166,14 +166,14 @@ export default function ToolsPage() {
 
       {/* Quick tool switcher (mobile bottom bar) */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 px-2 py-2">
-        <div className="flex justify-around">
+        <div className="grid grid-cols-4 gap-1">
           {['weight-balance', 'fuel', 'wind', 'timer'].map(toolId => {
             const tool = TOOLS.find(t => t.id === toolId)!;
             return (
               <button
                 key={toolId}
                 onClick={() => setActiveTool(tool.id)}
-                className={`flex flex-col items-center px-3 py-1 rounded-lg transition-colors ${
+                className={`flex flex-col items-center min-w-0 px-1 py-1 rounded-lg transition-colors ${
                   activeTool === tool.id ? 'bg-blue-900/30 text-blue-400' : 'text-slate-400'
                 }`}
               >
@@ -182,13 +182,6 @@ export default function ToolsPage() {
               </button>
             );
           })}
-          <button
-            onClick={() => setShowToolList(true)}
-            className="flex flex-col items-center px-3 py-1 rounded-lg text-slate-400"
-          >
-            <span className="text-xl">•••</span>
-            <span className="text-[10px]">More</span>
-          </button>
         </div>
       </div>
     </main>
