@@ -673,13 +673,6 @@ function formatNotamDate(isoTime: string | undefined): string {
   }
 }
 
-function getWindDirection(degrees: number): string {
-  const directions = ['North', 'NNE', 'NE', 'ENE', 'East', 'ESE', 'SE', 'SSE', 
-                      'South', 'SSW', 'SW', 'WSW', 'West', 'WNW', 'NW', 'NNW'];
-  const index = Math.round(degrees / 22.5) % 16;
-  return directions[index];
-}
-
 function formatAirportType(type: string): string {
   const types: Record<string, string> = {
     'large_airport': 'Large Airport',

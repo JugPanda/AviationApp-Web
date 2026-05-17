@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useId } from 'react';
 import {
   AircraftProfile,
   CustomAircraft,
@@ -112,6 +112,63 @@ interface StationInput {
   weight: number;
 }
 
+interface WeightBalancePreferences {
+  fuelGallons: number;
+  stationWeights: StationInput[];
+}
+
+const DEFAULT_AIRCRAFT_ID = 'C172S';
+
+function getDefaultStationWeights(aircraft: AircraftData): StationInput[] {
+  return aircraft.stations.map((station) => ({ weight: station.defaultWeight || 0 }));
+}
+
+function normalizeStationWeights(rawStations: unknown, aircraft: AircraftData): StationInput[] {
+  const defaults = getDefaultStationWeights(aircraft);
+  if (!Array.isArray(rawStations)) {
+    return defaults;
+  }
+
+  return aircraft.stations.map((_, index) => {
+    const candidate = rawStations[index];
+    const weight = typeof candidate === 'object' && candidate !== null && 'weight' in candidate
+      ? Number((candidate as { weight?: unknown }).weight)
+      : NaN;
+
+    return Number.isFinite(weight) ? { weight: Math.max(0, weight) } : defaults[index];
+  });
+}
+
+function getStoredPreferences(aircraftId: string, aircraft: AircraftData): WeightBalancePreferences {
+  const fallback = {
+    fuelGallons: Math.min(40, aircraft.fuelCapacity),
+    stationWeights: getDefaultStationWeights(aircraft),
+  };
+
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const saved = localStorage.getItem(`wb-${aircraftId}`);
+    if (!saved) {
+      return fallback;
+    }
+
+    const data = JSON.parse(saved);
+    const nextFuel = typeof data.fuel === 'number' && Number.isFinite(data.fuel)
+      ? Math.min(Math.max(data.fuel, 0), aircraft.fuelCapacity)
+      : fallback.fuelGallons;
+
+    return {
+      fuelGallons: nextFuel,
+      stationWeights: normalizeStationWeights(data.stations, aircraft),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 // Modal Component
 function Modal({ isOpen, onClose, title, children }: {
   isOpen: boolean;
@@ -143,14 +200,111 @@ function Modal({ isOpen, onClose, title, children }: {
   );
 }
 
+function computeWeightBalance(aircraft: AircraftData, fuelGallons: number, stationWeights: StationInput[]) {
+  if (stationWeights.length === 0) return null;
+
+  const emptyMoment = aircraft.emptyWeight * aircraft.emptyArm;
+  const fuelWeight = fuelGallons * aircraft.fuelWeight;
+  const fuelMoment = fuelWeight * aircraft.fuelArm;
+  const stationMoments = stationWeights.map((station, index) => ({
+    weight: station.weight,
+    arm: aircraft.stations[index]?.arm || 0,
+    moment: station.weight * (aircraft.stations[index]?.arm || 0),
+  }));
+
+  const totalStationWeight = stationMoments.reduce((sum, station) => sum + station.weight, 0);
+  const totalStationMoment = stationMoments.reduce((sum, station) => sum + station.moment, 0);
+  const totalWeight = aircraft.emptyWeight + fuelWeight + totalStationWeight;
+  const totalMoment = emptyMoment + fuelMoment + totalStationMoment;
+  const cg = totalMoment / totalWeight;
+
+  const envelope = aircraft.envelope;
+  let cgMin = envelope.points[0].cgMin;
+  let cgMax = envelope.points[0].cgMax;
+
+  for (let i = 1; i < envelope.points.length; i++) {
+    const prev = envelope.points[i - 1];
+    const curr = envelope.points[i];
+    if (totalWeight >= prev.weight && totalWeight <= curr.weight) {
+      const ratio = (totalWeight - prev.weight) / (curr.weight - prev.weight);
+      cgMin = prev.cgMin + ratio * (curr.cgMin - prev.cgMin);
+      cgMax = prev.cgMax + ratio * (curr.cgMax - prev.cgMax);
+      break;
+    }
+    if (totalWeight > curr.weight && i === envelope.points.length - 1) {
+      cgMin = curr.cgMin;
+      cgMax = curr.cgMax;
+    }
+  }
+
+  const withinWeight = totalWeight <= aircraft.maxGross;
+  const withinCG = cg >= cgMin && cg <= cgMax;
+
+  return {
+    emptyWeight: aircraft.emptyWeight,
+    emptyMoment,
+    fuelWeight,
+    fuelMoment,
+    stationMoments,
+    totalStationWeight,
+    totalWeight,
+    totalMoment,
+    cg,
+    cgMin,
+    cgMax,
+    withinWeight,
+    withinCG,
+    isValid: withinWeight && withinCG,
+    overweight: totalWeight - aircraft.maxGross,
+  };
+}
+
+function EnvelopeChart({ envelope, calculations }: { envelope: CGEnvelope; calculations: NonNullable<ReturnType<typeof computeWeightBalance>> }) {
+  const patternId = useId();
+  const padding = 30;
+  const width = 280;
+  const height = 200;
+  const minWeight = envelope.points[0].weight;
+  const maxWeight = envelope.points[envelope.points.length - 1].weight;
+  const minCG = Math.min(...envelope.points.map((point) => point.cgMin)) - 2;
+  const maxCG = Math.max(...envelope.points.map((point) => point.cgMax)) + 2;
+
+  const scaleX = (cg: number) => padding + ((cg - minCG) / (maxCG - minCG)) * (width - 2 * padding);
+  const scaleY = (weight: number) => height - padding - ((weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
+  const fwdPoints = envelope.points.map((point) => `${scaleX(point.cgMin)},${scaleY(point.weight)}`);
+  const aftPoints = [...envelope.points].reverse().map((point) => `${scaleX(point.cgMax)},${scaleY(point.weight)}`);
+  const envelopePath = `M ${fwdPoints.join(' L ')} L ${aftPoints.join(' L ')} Z`;
+  const cgX = scaleX(calculations.cg);
+  const cgY = scaleY(Math.min(calculations.totalWeight, maxWeight));
+
+  return (
+    <svg width={width} height={height} className="mx-auto">
+      <defs>
+        <pattern id={patternId} width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#334155" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+      <rect x={padding} y="10" width={width - 2 * padding} height={height - 2 * padding} fill={`url(#${patternId})`} />
+      <path d={envelopePath} fill="rgba(34, 197, 94, 0.2)" stroke="#22c55e" strokeWidth="2" />
+      <circle cx={cgX} cy={cgY} r="6" fill={calculations.isValid ? '#22c55e' : '#ef4444'} stroke="white" strokeWidth="2" />
+      <text x={width / 2} y={height - 5} textAnchor="middle" className="text-xs fill-slate-400">CG (inches)</text>
+      <text x="10" y={height / 2} textAnchor="middle" transform={`rotate(-90, 10, ${height / 2})`} className="text-xs fill-slate-400">Weight (lbs)</text>
+      <text x={padding} y={height - 10} textAnchor="start" className="text-[10px] fill-slate-500">{minCG.toFixed(0)}</text>
+      <text x={width - padding} y={height - 10} textAnchor="end" className="text-[10px] fill-slate-500">{maxCG.toFixed(0)}</text>
+      <text x={padding - 5} y={scaleY(minWeight)} textAnchor="end" className="text-[10px] fill-slate-500">{minWeight}</text>
+      <text x={padding - 5} y={scaleY(maxWeight)} textAnchor="end" className="text-[10px] fill-slate-500">{maxWeight}</text>
+    </svg>
+  );
+}
+
 export default function WeightBalance() {
-  const [selectedAircraft, setSelectedAircraft] = useState('C172S');
-  const [fuelGallons, setFuelGallons] = useState(40);
-  const [stationWeights, setStationWeights] = useState<StationInput[]>([]);
+  const [selectedAircraft, setSelectedAircraft] = useState(DEFAULT_AIRCRAFT_ID);
+  const [fuelGallons, setFuelGallons] = useState(() => getStoredPreferences(DEFAULT_AIRCRAFT_ID, AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID]).fuelGallons);
+  const [stationWeights, setStationWeights] = useState<StationInput[]>(() => getStoredPreferences(DEFAULT_AIRCRAFT_ID, AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID]).stationWeights);
   
   // Profile management state
-  const [profiles, setProfiles] = useState<AircraftProfile[]>([]);
-  const [customAircraftList, setCustomAircraftList] = useState<CustomAircraft[]>([]);
+  const [profiles, setProfiles] = useState<AircraftProfile[]>(() => getProfiles());
+  const [customAircraftList, setCustomAircraftList] = useState<CustomAircraft[]>(() => getCustomAircraft());
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   
   // Modal states
@@ -198,27 +352,15 @@ export default function WeightBalance() {
     return combined;
   }, [customAircraftList]);
 
-  const aircraft = allAircraft[selectedAircraft] || AIRCRAFT_DATABASE['C172S'];
+  const aircraft = allAircraft[selectedAircraft] || AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID];
 
-  // Load profiles and custom aircraft on mount
-  useEffect(() => {
-    setProfiles(getProfiles());
-    setCustomAircraftList(getCustomAircraft());
-  }, []);
-
-  // Initialize station weights when aircraft changes
-  useEffect(() => {
-    setStationWeights(aircraft.stations.map(s => ({ weight: s.defaultWeight || 0 })));
-    // Load saved preferences
-    const saved = localStorage.getItem(`wb-${selectedAircraft}`);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setFuelGallons(data.fuel || 40);
-        if (data.stations) setStationWeights(data.stations);
-      } catch {}
-    }
-  }, [aircraft, selectedAircraft]);
+  const applyAircraftSelection = useCallback((aircraftId: string, nextAircraft?: AircraftData) => {
+    const resolvedAircraft = nextAircraft ?? allAircraft[aircraftId] ?? AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID];
+    const preferences = getStoredPreferences(aircraftId, resolvedAircraft);
+    setSelectedAircraft(aircraftId);
+    setFuelGallons(preferences.fuelGallons);
+    setStationWeights(preferences.stationWeights);
+  }, [allAircraft]);
 
   // Save preferences
   useEffect(() => {
@@ -247,27 +389,27 @@ export default function WeightBalance() {
     if (!profile) return;
     
     setSelectedProfile(profileId);
-    
-    // Set aircraft type
+
     if (profile.customAircraft) {
-      // Check if this custom aircraft exists in our list
       const customKey = `custom-${profile.customAircraft.name}`;
       if (!allAircraft[customKey]) {
-        // Save the custom aircraft from the profile
         saveCustomAircraft(profile.customAircraft);
         setCustomAircraftList(getCustomAircraft());
       }
-      setSelectedAircraft(customKey);
-    } else {
-      setSelectedAircraft(profile.aircraftType);
-    }
-    
-    // Set fuel and weights after a small delay to let aircraft update
-    setTimeout(() => {
+
+      applyAircraftSelection(customKey, {
+        ...profile.customAircraft,
+        stations: profile.customAircraft.stations.map((station) => ({ ...station })),
+      });
       setFuelGallons(profile.fuelGallons);
-      setStationWeights(profile.stationWeights.map(w => ({ weight: w })));
-    }, 50);
-  }, [profiles, allAircraft]);
+      setStationWeights(profile.stationWeights.map((weight) => ({ weight })));
+      return;
+    }
+
+    applyAircraftSelection(profile.aircraftType);
+    setFuelGallons(profile.fuelGallons);
+    setStationWeights(profile.stationWeights.map((weight) => ({ weight })));
+  }, [profiles, allAircraft, applyAircraftSelection]);
 
   const handleSaveProfile = useCallback(() => {
     if (!profileName.trim()) return;
@@ -317,7 +459,10 @@ export default function WeightBalance() {
     
     saveCustomAircraft(customAircraftForm);
     setCustomAircraftList(getCustomAircraft());
-    setSelectedAircraft(`custom-${customAircraftForm.name}`);
+    applyAircraftSelection(`custom-${customAircraftForm.name}`, {
+      ...customAircraftForm,
+      stations: customAircraftForm.stations.map((station) => ({ ...station })),
+    });
     setShowCustomAircraftModal(false);
     
     // Reset form
@@ -341,17 +486,17 @@ export default function WeightBalance() {
         ]
       }
     });
-  }, [customAircraftForm]);
+  }, [customAircraftForm, applyAircraftSelection]);
 
   const handleDeleteCustomAircraft = useCallback((name: string) => {
     if (confirm(`Delete custom aircraft "${name}"?`)) {
       deleteCustomAircraft(name);
       setCustomAircraftList(getCustomAircraft());
       if (selectedAircraft === `custom-${name}`) {
-        setSelectedAircraft('C172S');
+        applyAircraftSelection(DEFAULT_AIRCRAFT_ID);
       }
     }
-  }, [selectedAircraft]);
+  }, [selectedAircraft, applyAircraftSelection]);
 
   // Import/Export handlers
   const handleExport = useCallback(() => {
@@ -378,141 +523,10 @@ export default function WeightBalance() {
   }, [importText]);
 
   // Calculate totals
-  const calculations = useMemo(() => {
-    if (stationWeights.length === 0) return null;
-
-    // Empty weight
-    const emptyMoment = aircraft.emptyWeight * aircraft.emptyArm;
-
-    // Fuel
-    const fuelWeight = fuelGallons * aircraft.fuelWeight;
-    const fuelMoment = fuelWeight * aircraft.fuelArm;
-
-    // Stations
-    const stationMoments = stationWeights.map((s, i) => ({
-      weight: s.weight,
-      arm: aircraft.stations[i]?.arm || 0,
-      moment: s.weight * (aircraft.stations[i]?.arm || 0)
-    }));
-
-    const totalStationWeight = stationMoments.reduce((sum, s) => sum + s.weight, 0);
-    const totalStationMoment = stationMoments.reduce((sum, s) => sum + s.moment, 0);
-
-    // Totals
-    const totalWeight = aircraft.emptyWeight + fuelWeight + totalStationWeight;
-    const totalMoment = emptyMoment + fuelMoment + totalStationMoment;
-    const cg = totalMoment / totalWeight;
-
-    // Check envelope
-    const envelope = aircraft.envelope;
-    let cgMin = envelope.points[0].cgMin;
-    let cgMax = envelope.points[0].cgMax;
-
-    // Interpolate CG limits based on weight
-    for (let i = 1; i < envelope.points.length; i++) {
-      const prev = envelope.points[i - 1];
-      const curr = envelope.points[i];
-      if (totalWeight >= prev.weight && totalWeight <= curr.weight) {
-        const ratio = (totalWeight - prev.weight) / (curr.weight - prev.weight);
-        cgMin = prev.cgMin + ratio * (curr.cgMin - prev.cgMin);
-        cgMax = prev.cgMax + ratio * (curr.cgMax - prev.cgMax);
-        break;
-      } else if (totalWeight > curr.weight && i === envelope.points.length - 1) {
-        cgMin = curr.cgMin;
-        cgMax = curr.cgMax;
-      }
-    }
-
-    const withinWeight = totalWeight <= aircraft.maxGross;
-    const withinCG = cg >= cgMin && cg <= cgMax;
-    const isValid = withinWeight && withinCG;
-
-    return {
-      emptyWeight: aircraft.emptyWeight,
-      emptyMoment,
-      fuelWeight,
-      fuelMoment,
-      stationMoments,
-      totalStationWeight,
-      totalWeight,
-      totalMoment,
-      cg,
-      cgMin,
-      cgMax,
-      withinWeight,
-      withinCG,
-      isValid,
-      overweight: totalWeight - aircraft.maxGross
-    };
-  }, [aircraft, fuelGallons, stationWeights]);
-
-  // SVG CG Envelope visualization
-  const EnvelopeChart = () => {
-    if (!calculations) return null;
-
-    const envelope = aircraft.envelope;
-    const padding = 30;
-    const width = 280;
-    const height = 200;
-    
-    // Find bounds
-    const minWeight = envelope.points[0].weight;
-    const maxWeight = envelope.points[envelope.points.length - 1].weight;
-    const minCG = Math.min(...envelope.points.map(p => p.cgMin)) - 2;
-    const maxCG = Math.max(...envelope.points.map(p => p.cgMax)) + 2;
-
-    const scaleX = (cg: number) => padding + ((cg - minCG) / (maxCG - minCG)) * (width - 2 * padding);
-    const scaleY = (w: number) => height - padding - ((w - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
-
-    // Build envelope path
-    const fwdPoints = envelope.points.map(p => `${scaleX(p.cgMin)},${scaleY(p.weight)}`);
-    const aftPoints = [...envelope.points].reverse().map(p => `${scaleX(p.cgMax)},${scaleY(p.weight)}`);
-    const envelopePath = `M ${fwdPoints.join(' L ')} L ${aftPoints.join(' L ')} Z`;
-
-    // Current CG point
-    const cgX = scaleX(calculations.cg);
-    const cgY = scaleY(Math.min(calculations.totalWeight, maxWeight));
-
-    return (
-      <svg width={width} height={height} className="mx-auto">
-        {/* Grid */}
-        <defs>
-          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#334155" strokeWidth="0.5"/>
-          </pattern>
-        </defs>
-        <rect x={padding} y="10" width={width - 2*padding} height={height - 2*padding} fill="url(#grid)" />
-        
-        {/* Envelope */}
-        <path 
-          d={envelopePath} 
-          fill="rgba(34, 197, 94, 0.2)" 
-          stroke="#22c55e" 
-          strokeWidth="2"
-        />
-        
-        {/* CG Point */}
-        <circle 
-          cx={cgX} 
-          cy={cgY} 
-          r="6" 
-          fill={calculations.isValid ? '#22c55e' : '#ef4444'}
-          stroke="white"
-          strokeWidth="2"
-        />
-        
-        {/* Axes labels */}
-        <text x={width/2} y={height - 5} textAnchor="middle" className="text-xs fill-slate-400">CG (inches)</text>
-        <text x="10" y={height/2} textAnchor="middle" transform={`rotate(-90, 10, ${height/2})`} className="text-xs fill-slate-400">Weight (lbs)</text>
-        
-        {/* Min/Max labels */}
-        <text x={padding} y={height - 10} textAnchor="start" className="text-[10px] fill-slate-500">{minCG.toFixed(0)}</text>
-        <text x={width - padding} y={height - 10} textAnchor="end" className="text-[10px] fill-slate-500">{maxCG.toFixed(0)}</text>
-        <text x={padding - 5} y={scaleY(minWeight)} textAnchor="end" className="text-[10px] fill-slate-500">{minWeight}</text>
-        <text x={padding - 5} y={scaleY(maxWeight)} textAnchor="end" className="text-[10px] fill-slate-500">{maxWeight}</text>
-      </svg>
-    );
-  };
+  const calculations = useMemo(
+    () => computeWeightBalance(aircraft, fuelGallons, stationWeights),
+    [aircraft, fuelGallons, stationWeights]
+  );
 
   return (
     <div className="space-y-6">
@@ -560,7 +574,7 @@ export default function WeightBalance() {
           <select
             value={selectedAircraft}
             onChange={(e) => {
-              setSelectedAircraft(e.target.value);
+              applyAircraftSelection(e.target.value);
               setSelectedProfile('');
             }}
             className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -638,7 +652,7 @@ export default function WeightBalance() {
           {/* CG Envelope Chart */}
           <div className="bg-slate-800/50 rounded-lg p-4">
             <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">CG Envelope</h4>
-            <EnvelopeChart />
+            <EnvelopeChart envelope={aircraft.envelope} calculations={calculations} />
           </div>
 
           {/* Summary Table */}
@@ -691,10 +705,10 @@ export default function WeightBalance() {
               <div>
                 <p className="text-sm text-slate-400">Center of Gravity</p>
                 <p className={`text-2xl font-bold ${calculations.withinCG ? 'text-green-400' : 'text-red-400'}`}>
-                  {calculations.cg.toFixed(2)}" 
+                  {calculations.cg.toFixed(2)} in
                 </p>
                 <p className="text-xs text-slate-500">
-                  Limits: {calculations.cgMin.toFixed(1)}" to {calculations.cgMax.toFixed(1)}"
+                  Limits: {calculations.cgMin.toFixed(1)} in to {calculations.cgMax.toFixed(1)} in
                 </p>
               </div>
               <div className="text-right">
