@@ -11,70 +11,74 @@ export interface NotamData {
   severity: 'low' | 'medium' | 'high';
 }
 
-// Note: FAA NOTAM API requires authentication or scraping
-// This is a placeholder that can be expanded with proper API access
-// For now, we'll fetch from a public source if available
+interface NotamResponse {
+  notams: NotamData[];
+  unavailable?: boolean;
+  message?: string;
+}
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ icao: string }> }
 ) {
   const { icao } = await params;
-  
+
   if (!icao || icao.length < 3) {
     return NextResponse.json({ error: 'Invalid ICAO code' }, { status: 400 });
   }
 
   try {
-    // Try to fetch from aviationweather.gov NOTAM endpoint
     const url = `https://aviationweather.gov/api/data/notam?icao=${icao.toUpperCase()}&format=json`;
-    
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'AvWeather/1.0'
       },
-      next: { revalidate: 600 } // Cache for 10 minutes
+      next: { revalidate: 600 }
     });
 
     if (!response.ok) {
-      // Return empty array if no NOTAMs found
       if (response.status === 404) {
-        return NextResponse.json([]);
+        return NextResponse.json<NotamResponse>({ notams: [] });
       }
       throw new Error(`NOTAM API returned ${response.status}`);
     }
 
     const data = await response.json();
-    
-    // Parse and categorize NOTAMs
-    const notams: NotamData[] = (Array.isArray(data) ? data : []).map((notam: any, index: number) => {
-      const text = notam.text || notam.notamText || notam.traditionalMessage || '';
-      
+
+    const notams: NotamData[] = (Array.isArray(data) ? data : []).map((notam: Record<string, unknown>, index: number) => {
+      const text = String(notam.text || notam.notamText || notam.traditionalMessage || '');
+
       return {
-        id: notam.notamNumber || notam.id || `${icao}-${index}`,
+        id: String(notam.notamNumber || notam.id || `${icao}-${index}`),
         icaoId: icao.toUpperCase(),
         type: categorizeNotam(text),
-        text: text,
-        effectiveStart: notam.effectiveStart || notam.startDate,
-        effectiveEnd: notam.effectiveEnd || notam.endDate,
-        isActive: checkNotamActive(notam.effectiveStart, notam.effectiveEnd),
+        text,
+        effectiveStart: typeof notam.effectiveStart === 'string' ? notam.effectiveStart : typeof notam.startDate === 'string' ? notam.startDate : undefined,
+        effectiveEnd: typeof notam.effectiveEnd === 'string' ? notam.effectiveEnd : typeof notam.endDate === 'string' ? notam.endDate : undefined,
+        isActive: checkNotamActive(
+          typeof notam.effectiveStart === 'string' ? notam.effectiveStart : typeof notam.startDate === 'string' ? notam.startDate : undefined,
+          typeof notam.effectiveEnd === 'string' ? notam.effectiveEnd : typeof notam.endDate === 'string' ? notam.endDate : undefined,
+        ),
         severity: assessSeverity(text)
       };
     });
 
-    return NextResponse.json(notams);
+    return NextResponse.json<NotamResponse>({ notams });
   } catch (error) {
     console.error('NOTAM fetch error:', error);
-    
-    // Return mock data for demo purposes
-    const mockNotams = generateMockNotams(icao.toUpperCase());
-    return NextResponse.json(mockNotams);
+
+    return NextResponse.json<NotamResponse>({
+      notams: [],
+      unavailable: true,
+      message: 'Live NOTAM source unavailable right now. Reconnect or cross-check with an official briefing source.',
+    }, { status: 503 });
   }
 }
 
 function categorizeNotam(text: string): NotamData['type'] {
   const upperText = text.toUpperCase();
-  
+
   if (upperText.includes('TFR') || upperText.includes('TEMPORARY FLIGHT RESTRICTION')) {
     return 'TFR';
   }
@@ -90,14 +94,13 @@ function categorizeNotam(text: string): NotamData['type'] {
   if (upperText.includes('AD') || upperText.includes('APRON') || upperText.includes('TWY')) {
     return 'Airport';
   }
-  
+
   return 'Other';
 }
 
 function assessSeverity(text: string): NotamData['severity'] {
   const upperText = text.toUpperCase();
-  
-  // High severity
+
   if (
     upperText.includes('CLSD') ||
     upperText.includes('CLOSED') ||
@@ -107,8 +110,7 @@ function assessSeverity(text: string): NotamData['severity'] {
   ) {
     return 'high';
   }
-  
-  // Medium severity
+
   if (
     upperText.includes('LIMITED') ||
     upperText.includes('REDUCED') ||
@@ -117,48 +119,22 @@ function assessSeverity(text: string): NotamData['severity'] {
   ) {
     return 'medium';
   }
-  
+
   return 'low';
 }
 
 function checkNotamActive(start?: string, end?: string): boolean {
   const now = new Date();
-  
+
   if (start) {
     const startDate = new Date(start);
     if (startDate > now) return false;
   }
-  
+
   if (end) {
     const endDate = new Date(end);
     if (endDate < now) return false;
   }
-  
-  return true;
-}
 
-function generateMockNotams(icao: string): NotamData[] {
-  // Return realistic mock data when API is unavailable
-  return [
-    {
-      id: `${icao}-001`,
-      icaoId: icao,
-      type: 'Airport',
-      text: `!${icao} ${icao} AD AP FUEL AVBL JET A, 100LL`,
-      effectiveStart: new Date().toISOString(),
-      effectiveEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      isActive: true,
-      severity: 'low'
-    },
-    {
-      id: `${icao}-002`,
-      icaoId: icao,
-      type: 'Runway',
-      text: `!${icao} ${icao} RWY 09/27 PAPI OUT OF SERVICE`,
-      effectiveStart: new Date().toISOString(),
-      effectiveEnd: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      isActive: true,
-      severity: 'medium'
-    }
-  ];
+  return true;
 }

@@ -6,6 +6,8 @@ import MapWrapper from '@/components/MapWrapper';
 import SearchBar from '@/components/SearchBar';
 import AirportInfo from '@/components/AirportInfo';
 import FlightInfo from '@/components/FlightInfo';
+import MapBrief from '@/components/MapBrief';
+import PwaStatus from '@/components/PwaStatus';
 import { FlightData } from '@/components/FlightMarkers';
 import { MetarData } from '@/types';
 import { findBestTrackedFlight, getTrackedRefreshQuery, isFlightTracked, normalizeFlightIdentifier } from '@/lib/flight-tracking';
@@ -54,7 +56,6 @@ export default function Home() {
   // UI panels
   const [showLayers, setShowLayers] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
-  const [activeBottomTab, setActiveBottomTab] = useState<string>('map');
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({ ...prev, [category]: !prev[category] }));
@@ -229,6 +230,16 @@ export default function Home() {
   );
 
   const activeLayerCount = [showFlights, showTFRs, showRadar, showAirspace, showHazards].filter(Boolean).length;
+  const scopeLabel = selectedStates.length > 0
+    ? `${selectedStates.length} state${selectedStates.length === 1 ? '' : 's'}`
+    : selectedRegion
+      ? (US_REGIONS[selectedRegion]?.name ?? 'Region')
+      : 'All US';
+  const trackedFlightLabel = selectedFlight
+    ? normalizeFlightIdentifier(selectedFlight.callsign) || selectedFlight.icao24
+    : trackedFlight
+      ? normalizeFlightIdentifier(trackedFlight)
+      : null;
 
   return (
     <main className="h-[100dvh] flex flex-col bg-slate-950">
@@ -440,6 +451,17 @@ export default function Home() {
             {lastUpdated && ` • ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
           </span>
         </div>
+
+        <MapBrief
+          scopeLabel={scopeLabel}
+          visibleCount={visibleCount}
+          totalCount={airports.length}
+          activeLayerCount={activeLayerCount}
+          trackedFlightLabel={trackedFlightLabel}
+          lastUpdated={lastUpdated}
+          flightsLoading={flightsLoading}
+        />
+        <PwaStatus />
       </header>
 
       {/* Click outside to close dropdowns */}
@@ -471,13 +493,28 @@ export default function Home() {
         />
         
         {/* Mobile: Floating status pill (top-left) */}
-        <div className="sm:hidden absolute top-3 left-3 bg-slate-900/90 backdrop-blur-sm rounded-full px-3 py-1.5 text-xs text-slate-300 flex items-center gap-2 shadow-lg">
-          <span>{visibleCount} airports</span>
-          {activeLayerCount > 0 && (
-            <>
-              <span className="text-slate-600">•</span>
-              <span className="text-blue-400">{activeLayerCount} layer{activeLayerCount !== 1 ? 's' : ''}</span>
-            </>
+        <div className="sm:hidden absolute top-3 left-3 right-14 bg-slate-900/90 backdrop-blur-sm rounded-2xl px-3 py-2 text-xs text-slate-300 shadow-lg border border-slate-700/60">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{visibleCount} airports</span>
+            <span className="text-slate-600">•</span>
+            <span>{scopeLabel}</span>
+            {activeLayerCount > 0 && (
+              <>
+                <span className="text-slate-600">•</span>
+                <span className="text-blue-400">{activeLayerCount} layer{activeLayerCount !== 1 ? 's' : ''}</span>
+              </>
+            )}
+            {trackedFlightLabel && (
+              <>
+                <span className="text-slate-600">•</span>
+                <span className="text-amber-300">{trackedFlightLabel}</span>
+              </>
+            )}
+          </div>
+          {lastUpdated && (
+            <div className="mt-1 text-[11px] text-slate-500">
+              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </div>
           )}
         </div>
 
@@ -722,7 +759,7 @@ export default function Home() {
             <div className="md:hidden flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
-            <AirportInfo airport={selectedAirport} onClose={() => setSelectedAirport(null)} />
+            <AirportInfo key={selectedAirport.icaoId} airport={selectedAirport} onClose={() => setSelectedAirport(null)} />
           </div>
         </>
       )}
@@ -736,6 +773,7 @@ export default function Home() {
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
             <FlightInfo 
+              key={selectedFlight.icao24}
               flight={selectedFlight} 
               onClose={() => setSelectedFlight(null)}
               onTrack={handleTrackFlight}

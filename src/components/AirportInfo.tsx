@@ -74,6 +74,12 @@ interface NotamData {
   severity: 'low' | 'medium' | 'high';
 }
 
+interface NotamResponse {
+  notams: NotamData[];
+  unavailable?: boolean;
+  message?: string;
+}
+
 // Convert ICAO to FAA identifier for US airports
 function icaoToFaa(icao: string): string {
   if (icao.startsWith('K') && icao.length === 4) {
@@ -91,6 +97,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   const [tafLoading, setTafLoading] = useState(false);
   const [notamLoading, setNotamLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notamNotice, setNotamNotice] = useState<string | null>(null);
   
   useEffect(() => {
     if (!airport?.icaoId) return;
@@ -118,35 +125,53 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   useEffect(() => {
     if (activeTab !== 'taf' || !airport?.icaoId) return;
     if (tafData?.icaoId === airport.icaoId) return;
-    
-    setTafLoading(true);
-    fetch(`/api/taf?ids=${airport.icaoId}`)
-      .then(res => res.json())
-      .then(data => {
+
+    const loadTaf = async () => {
+      setTafLoading(true);
+      try {
+        const res = await fetch(`/api/taf?ids=${airport.icaoId}`);
+        if (!res.ok) {
+          throw new Error('Failed to load TAF');
+        }
+
+        const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setTafData(data[0]);
+        } else {
+          setTafData(null);
         }
+      } catch {
+        setTafData(null);
+      } finally {
         setTafLoading(false);
-      })
-      .catch(() => setTafLoading(false));
+      }
+    };
+
+    void loadTaf();
   }, [activeTab, airport?.icaoId, tafData?.icaoId]);
 
   // Fetch NOTAMs when NOTAMs tab is selected
   useEffect(() => {
     if (activeTab !== 'notams' || !airport?.icaoId) return;
-    if (notams.length > 0 && notams[0]?.icaoId === airport.icaoId) return;
-    
-    setNotamLoading(true);
-    fetch(`/api/notam/${airport.icaoId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setNotams(data);
-        }
+
+    const loadNotams = async () => {
+      setNotamLoading(true);
+      setNotamNotice(null);
+      try {
+        const res = await fetch(`/api/notam/${airport.icaoId}`);
+        const data: NotamResponse = await res.json();
+        setNotams(Array.isArray(data?.notams) ? data.notams : []);
+        setNotamNotice(data?.unavailable ? (data.message ?? 'Live NOTAM source unavailable right now.') : null);
+      } catch {
+        setNotams([]);
+        setNotamNotice('Unable to load NOTAMs right now.');
+      } finally {
         setNotamLoading(false);
-      })
-      .catch(() => setNotamLoading(false));
-  }, [activeTab, airport?.icaoId, notams]);
+      }
+    };
+
+    void loadNotams();
+  }, [activeTab, airport?.icaoId]);
   
   if (!airport) return null;
 
@@ -199,6 +224,9 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         </TabButton>
         <TabButton active={activeTab === 'notams'} onClick={() => setActiveTab('notams')}>
           ⚠️ NOTAMs
+        </TabButton>
+        <TabButton active={activeTab === 'info'} onClick={() => setActiveTab('info')}>
+          ℹ️ Info
         </TabButton>
         <TabButton active={activeTab === 'runways'} onClick={() => setActiveTab('runways')}>
           🛬 Runways
@@ -353,8 +381,14 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
       {activeTab === 'notams' && (
         <div className="p-3 sm:p-4">
           {notamLoading && <div className="text-center text-slate-400 py-4">Loading NOTAMs...</div>}
+
+          {notamNotice && (
+            <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+              {notamNotice}
+            </div>
+          )}
           
-          {!notamLoading && notams.length === 0 && (
+          {!notamLoading && notams.length === 0 && !notamNotice && (
             <div className="text-center text-slate-400 py-4">No NOTAMs found</div>
           )}
           

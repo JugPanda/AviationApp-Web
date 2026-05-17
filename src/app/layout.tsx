@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+import PwaRegistrar from '@/components/PwaRegistrar';
 import { getSiteUrl } from '@/lib/site-url';
 
 const siteUrl = getSiteUrl();
@@ -46,6 +47,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
       </head>
       <body className="antialiased">
+        <PwaRegistrar />
         {children}
       </body>
     </html>

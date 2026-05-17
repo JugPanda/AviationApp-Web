@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       verticalRate: state[11] as number || 0,
       onGround: state[8] as boolean,
       lastUpdate: state[4] as number,
-    })).filter((f: FlightData) => f.latitude && f.longitude);
+    })).filter((f: FlightData) => Number.isFinite(f.latitude) && Number.isFinite(f.longitude));
     
     // Filter by callsign if provided
     if (callsign) {

@@ -18,6 +18,11 @@ const metersToFeet = (m: number) => Math.round(m * 3.281);
 // Convert m/s to fpm
 const msToFpm = (ms: number) => Math.round(ms * 196.85);
 
+const formatCoordinate = (value: number, positiveLabel: string, negativeLabel: string) => {
+  const hemisphere = value >= 0 ? positiveLabel : negativeLabel;
+  return `${Math.abs(value).toFixed(4)}°${hemisphere}`;
+};
+
 export default function FlightInfo({ flight, onClose, onTrack, isTracking }: FlightInfoProps) {
   return (
     <div className="p-4">
@@ -103,7 +108,7 @@ export default function FlightInfo({ flight, onClose, onTrack, isTracking }: Fli
         <div className="bg-slate-800 rounded-lg p-3">
           <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Position</div>
           <div className="font-mono text-sm">
-            {flight.latitude.toFixed(4)}°N, {flight.longitude.toFixed(4)}°W
+            {formatCoordinate(flight.latitude, 'N', 'S')}, {formatCoordinate(flight.longitude, 'E', 'W')}
           </div>
         </div>
 

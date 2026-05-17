@@ -1,35 +1,35 @@
-import type { MetadataRoute } from 'next'
+import type { MetadataRoute } from 'next';
 
-import { getSiteUrl } from '@/lib/site-url'
+import { getSiteUrl } from '@/lib/site-url';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = getSiteUrl()
-  const now = new Date()
+  const siteUrl = getSiteUrl();
+  const now = new Date();
 
   return [
     {
-      url: `${baseUrl}/`,
+      url: `${siteUrl}/`,
       lastModified: now,
       changeFrequency: 'hourly',
       priority: 1,
     },
     {
-      url: `${baseUrl}/tools`,
-      lastModified: now,
-      changeFrequency: 'weekly',
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/plan`,
+      url: `${siteUrl}/tools`,
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/logbook`,
+      url: `${siteUrl}/plan`,
       lastModified: now,
       changeFrequency: 'weekly',
-      priority: 0.8,
+      priority: 0.7,
     },
-  ]
+    {
+      url: `${siteUrl}/logbook`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+  ];
 }
