@@ -327,24 +327,27 @@ const MAP_LAYERS = {
   },
   sectional: {
     name: 'VFR Sectional',
-    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}',
+    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/WMTS/tile/1.0.0/VFR_Sectional/default/default028mm/{z}/{y}/{x}',
     attribution: '&copy; <a href="https://www.faa.gov/">FAA</a>',
-    maxZoom: 11,
-    minZoom: 5,
+    maxZoom: 12,
+    maxNativeZoom: 12,
+    minZoom: 8,
   },
   ifr_low: {
     name: 'IFR Low',
-    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_Low/MapServer/tile/{z}/{y}/{x}',
+    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_Low/MapServer/WMTS/tile/1.0.0/IFR_Low/default/default028mm/{z}/{y}/{x}',
     attribution: '&copy; <a href="https://www.faa.gov/">FAA</a>',
-    maxZoom: 11,
-    minZoom: 5,
+    maxZoom: 12,
+    maxNativeZoom: 12,
+    minZoom: 8,
   },
   ifr_high: {
     name: 'IFR High',
-    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_High/MapServer/tile/{z}/{y}/{x}',
+    url: 'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_High/MapServer/WMTS/tile/1.0.0/IFR_High/default/default028mm/{z}/{y}/{x}',
     attribution: '&copy; <a href="https://www.faa.gov/">FAA</a>',
-    maxZoom: 11,
-    minZoom: 5,
+    maxZoom: 12,
+    maxNativeZoom: 12,
+    minZoom: 8,
   },
 };
 
@@ -354,7 +357,7 @@ export default function AirportMap({
   onAirportSelect,
   filters,
   center = [39.8283, -98.5795], // Center of US
-  zoom = 4,
+  zoom = 8,
   flights = [],
   trackedFlight = null,
   onFlightSelect,
@@ -439,6 +442,11 @@ export default function AirportMap({
       zoom={zoom}
       className="w-full h-full"
       style={{ background: '#1e293b' }}
+      preferCanvas
+      zoomSnap={1}
+      zoomDelta={1}
+      minZoom={MAP_LAYERS.sectional.minZoom}
+      maxZoom={MAP_LAYERS.sectional.maxZoom}
     >
       {/* Location control button */}
       <LocationControl 
@@ -457,7 +465,7 @@ export default function AirportMap({
 
       <LayersControl position="topright">
         {/* Base Layers */}
-        <LayersControl.BaseLayer checked name="Dark">
+        <LayersControl.BaseLayer name="Dark">
           <TileLayer
             attribution={MAP_LAYERS.dark.attribution}
             url={MAP_LAYERS.dark.url}
@@ -489,12 +497,16 @@ export default function AirportMap({
           />
         </LayersControl.BaseLayer>
         
-        <LayersControl.BaseLayer name="VFR Sectional">
+        <LayersControl.BaseLayer checked name="VFR Sectional">
           <TileLayer
             attribution={MAP_LAYERS.sectional.attribution}
             url={MAP_LAYERS.sectional.url}
             maxZoom={MAP_LAYERS.sectional.maxZoom}
+            maxNativeZoom={MAP_LAYERS.sectional.maxNativeZoom}
             minZoom={MAP_LAYERS.sectional.minZoom}
+            detectRetina
+            updateWhenIdle
+            keepBuffer={4}
           />
         </LayersControl.BaseLayer>
         
@@ -503,7 +515,11 @@ export default function AirportMap({
             attribution={MAP_LAYERS.ifr_low.attribution}
             url={MAP_LAYERS.ifr_low.url}
             maxZoom={MAP_LAYERS.ifr_low.maxZoom}
+            maxNativeZoom={MAP_LAYERS.ifr_low.maxNativeZoom}
             minZoom={MAP_LAYERS.ifr_low.minZoom}
+            detectRetina
+            updateWhenIdle
+            keepBuffer={4}
           />
         </LayersControl.BaseLayer>
         
@@ -512,7 +528,11 @@ export default function AirportMap({
             attribution={MAP_LAYERS.ifr_high.attribution}
             url={MAP_LAYERS.ifr_high.url}
             maxZoom={MAP_LAYERS.ifr_high.maxZoom}
+            maxNativeZoom={MAP_LAYERS.ifr_high.maxNativeZoom}
             minZoom={MAP_LAYERS.ifr_high.minZoom}
+            detectRetina
+            updateWhenIdle
+            keepBuffer={4}
           />
         </LayersControl.BaseLayer>
 
