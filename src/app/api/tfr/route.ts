@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { buildLiveOverlayResponse, buildUnavailableOverlayResponse } from '@/lib/overlay-response';
+
 export interface TfrData {
   id: string;
   name: string;
@@ -23,35 +25,24 @@ export interface TfrData {
 
 export async function GET(request: NextRequest) {
   try {
-    // FAA TFR data - multiple sources to try
-    // Primary: FAA TFR JSON feed
-    // Note: FAA doesn't have a clean public JSON API, so we'll use aviationweather.gov
-    
     const tfrUrl = 'https://tfr.faa.gov/tfr2/list.json';
-    
-    let tfrs: TfrData[] = [];
-    
-    try {
-      const response = await fetch(tfrUrl, {
-        headers: {
-          'User-Agent': 'AvWeather/1.0',
-          'Accept': 'application/json'
-        },
-        next: { revalidate: 300 } // Cache for 5 minutes
-      });
+    const response = await fetch(tfrUrl, {
+      headers: {
+        'User-Agent': 'AvWeather/1.0',
+        'Accept': 'application/json'
+      },
+      next: { revalidate: 300 }
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        tfrs = parseFaaTfrs(data);
-      }
-    } catch (e) {
-      console.log('FAA TFR API not available, using sample data');
+    if (!response.ok) {
+      return NextResponse.json(
+        buildUnavailableOverlayResponse<TfrData>('Live TFR data is unavailable right now. Cross-check with an official FAA briefing source.'),
+        { status: 503 }
+      );
     }
 
-    // If no TFRs from API, return sample/demo data
-    if (tfrs.length === 0) {
-      tfrs = getSampleTfrs();
-    }
+    const data = await response.json();
+    let tfrs = parseFaaTfrs(data);
 
     // Filter by bounds if provided
     const bounds = request.nextUrl.searchParams.get('bounds');
@@ -72,12 +63,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(tfrs);
+    return NextResponse.json(buildLiveOverlayResponse(tfrs));
   } catch (error) {
     console.error('TFR fetch error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch TFR data' },
-      { status: 500 }
+      buildUnavailableOverlayResponse<TfrData>('Live TFR data is unavailable right now. Cross-check with an official FAA briefing source.'),
+      { status: 503 }
     );
   }
 }
@@ -153,68 +144,4 @@ function checkActive(start?: string, end?: string): boolean {
   return true;
 }
 
-function getSampleTfrs(): TfrData[] {
-  // Return realistic sample TFRs for demo
-  const now = new Date();
-  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  
-  return [
-    {
-      id: 'TFR-DEMO-001',
-      name: 'VIP Movement',
-      type: 'VIP',
-      facility: 'ZDC',
-      state: 'DC',
-      effectiveStart: now.toISOString(),
-      effectiveEnd: tomorrow.toISOString(),
-      altitudeLow: 0,
-      altitudeHigh: 18000,
-      description: 'Temporary Flight Restriction for VIP Movement',
-      coordinates: {
-        type: 'circle',
-        center: { lat: 38.8977, lng: -77.0365 }, // Washington DC
-        radius: 30
-      },
-      isActive: true,
-      notamNumber: 'FDC 4/1234'
-    },
-    {
-      id: 'TFR-DEMO-002',
-      name: 'Sporting Event',
-      type: 'STADIUM',
-      facility: 'ZNY',
-      state: 'NY',
-      effectiveStart: now.toISOString(),
-      effectiveEnd: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
-      altitudeLow: 0,
-      altitudeHigh: 3000,
-      description: 'Temporary Flight Restriction for Sporting Event',
-      coordinates: {
-        type: 'circle',
-        center: { lat: 40.8296, lng: -73.9262 }, // Yankee Stadium
-        radius: 3
-      },
-      isActive: true,
-      notamNumber: 'FDC 4/2345'
-    },
-    {
-      id: 'TFR-DEMO-003',
-      name: 'Wildfire Suppression',
-      type: 'HAZARD',
-      facility: 'ZLA',
-      state: 'CA',
-      effectiveStart: now.toISOString(),
-      effectiveEnd: new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString(),
-      altitudeLow: 0,
-      altitudeHigh: 8000,
-      description: 'Temporary Flight Restriction for Wildfire Suppression Operations',
-      coordinates: {
-        type: 'circle',
-        center: { lat: 34.0522, lng: -118.2437 }, // LA area
-        radius: 5
-      },
-      isActive: true,
-      notamNumber: 'FDC 4/3456'
-    }
-  ];
-}
+

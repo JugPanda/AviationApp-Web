@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Polygon, Popup, useMap } from 'react-leaflet';
 
+import MapLayerNotice from '@/components/MapLayerNotice';
+import { isOverlayResponse } from '@/lib/overlay-response';
+
 interface SigmetData {
   id: string;
   type: 'SIGMET' | 'AIRMET';
@@ -24,38 +27,25 @@ interface SigmetLayerProps {
 
 function getSigmetStyle(sigmet: SigmetData) {
   const isSigmet = sigmet.type === 'SIGMET';
-  
-  // Color by hazard type
+
   if (sigmet.subType.includes('CONV') || sigmet.subType.includes('TS')) {
-    return {
-      color: '#ef4444', fillColor: '#ef4444',
-      fillOpacity: 0.15, weight: 2
-    };
+    return { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.15, weight: 2 };
   }
   if (sigmet.subType.includes('TURB')) {
-    return {
-      color: '#f97316', fillColor: '#f97316',
-      fillOpacity: isSigmet ? 0.2 : 0.12, weight: isSigmet ? 2 : 1.5
-    };
+    return { color: '#f97316', fillColor: '#f97316', fillOpacity: isSigmet ? 0.2 : 0.12, weight: isSigmet ? 2 : 1.5 };
   }
   if (sigmet.subType.includes('ICE') || sigmet.subType.includes('ICG')) {
-    return {
-      color: '#3b82f6', fillColor: '#3b82f6',
-      fillOpacity: isSigmet ? 0.2 : 0.12, weight: isSigmet ? 2 : 1.5
-    };
+    return { color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: isSigmet ? 0.2 : 0.12, weight: isSigmet ? 2 : 1.5 };
   }
   if (sigmet.subType.includes('IFR') || sigmet.subType.includes('MTN')) {
-    return {
-      color: '#8b5cf6', fillColor: '#8b5cf6',
-      fillOpacity: 0.12, weight: 1.5
-    };
+    return { color: '#8b5cf6', fillColor: '#8b5cf6', fillOpacity: 0.12, weight: 1.5 };
   }
-  
+
   return {
     color: isSigmet ? '#ef4444' : '#eab308',
     fillColor: isSigmet ? '#ef4444' : '#eab308',
     fillOpacity: isSigmet ? 0.2 : 0.1,
-    weight: isSigmet ? 2 : 1
+    weight: isSigmet ? 2 : 1,
   };
 }
 
@@ -77,13 +67,20 @@ function formatAlt(ft?: number): string {
 function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
     });
-  } catch { return '--'; }
+  } catch {
+    return '--';
+  }
 }
 
 export default function SigmetLayer({ visible }: SigmetLayerProps) {
   const [sigmets, setSigmets] = useState<SigmetData[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
   const map = useMap();
 
   useEffect(() => {
@@ -92,20 +89,31 @@ export default function SigmetLayer({ visible }: SigmetLayerProps) {
     const fetchSigmets = async () => {
       try {
         const response = await fetch('/api/sigmet?type=all');
-        if (!response.ok) throw new Error('Failed');
-        
         const data = await response.json();
-        if (Array.isArray(data)) {
-          setSigmets(data.filter((s: SigmetData) => s.coords.length >= 3 && s.isActive));
+
+        if (isOverlayResponse<SigmetData>(data)) {
+          setSigmets(data.items.filter((sigmet) => sigmet.coords.length >= 3 && sigmet.isActive));
+          setNotice(data.status === 'unavailable' ? data.message ?? 'Live SIGMET/AIRMET data is unavailable right now.' : null);
+          return;
         }
+
+        if (Array.isArray(data)) {
+          setSigmets(data.filter((sigmet: SigmetData) => sigmet.coords.length >= 3 && sigmet.isActive));
+          setNotice(null);
+          return;
+        }
+
+        throw new Error('Unexpected SIGMET response shape');
       } catch (error) {
         console.error('SIGMET fetch error:', error);
+        setSigmets([]);
+        setNotice('Unable to load live SIGMET/AIRMET data right now. Cross-check with an official briefing source.');
       }
     };
 
-    fetchSigmets();
-    const interval = setInterval(fetchSigmets, 10 * 60 * 1000); // Every 10 min
-    
+    void fetchSigmets();
+    const interval = setInterval(() => void fetchSigmets(), 10 * 60 * 1000);
+
     return () => clearInterval(interval);
   }, [visible, map]);
 
@@ -113,38 +121,34 @@ export default function SigmetLayer({ visible }: SigmetLayerProps) {
 
   return (
     <>
+      <MapLayerNotice message={notice} position="top-right" tone="amber" />
       {sigmets.map((sigmet) => {
         const style = getSigmetStyle(sigmet);
-        const positions = sigmet.coords.map(c => [c.lat, c.lng] as [number, number]);
+        const positions = sigmet.coords.map((coord) => [coord.lat, coord.lng] as [number, number]);
         const icon = getHazardIcon(sigmet.subType);
-        
+
         return (
-          <Polygon
-            key={sigmet.id}
-            positions={positions}
-            pathOptions={style}
-          >
+          <Polygon key={sigmet.id} positions={positions} pathOptions={style}>
             <Popup>
               <div className="min-w-[220px] max-w-[300px]">
                 <div className="font-bold text-sm mb-1">
                   {icon} {sigmet.type} — {sigmet.subType}
                 </div>
-                
+
                 <div className="text-xs space-y-1">
                   <p className="font-medium">{sigmet.hazard}</p>
-                  
+
                   <div className="border-t pt-1 mt-1">
                     <p><strong>Valid:</strong> {formatTime(sigmet.validFrom)}</p>
                     <p><strong>Until:</strong> {formatTime(sigmet.validTo)}</p>
                   </div>
-                  
+
                   {(sigmet.altitudeLow != null || sigmet.altitudeHigh != null) && (
                     <p>
-                      <strong>Altitude:</strong>{' '}
-                      {formatAlt(sigmet.altitudeLow)} to {formatAlt(sigmet.altitudeHigh)}
+                      <strong>Altitude:</strong> {formatAlt(sigmet.altitudeLow)} to {formatAlt(sigmet.altitudeHigh)}
                     </p>
                   )}
-                  
+
                   <details className="border-t pt-1 mt-1">
                     <summary className="text-gray-500 cursor-pointer">Raw Text</summary>
                     <pre className="text-[10px] whitespace-pre-wrap mt-1">{sigmet.rawText}</pre>

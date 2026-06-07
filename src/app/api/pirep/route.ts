@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { buildLiveOverlayResponse, buildUnavailableOverlayResponse } from '@/lib/overlay-response';
+
 export interface PirepData {
   id: string;
   receiptTime: string;
@@ -37,9 +39,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const bounds = searchParams.get('bounds');
   const hours = searchParams.get('hours') || '3';
+  const unavailableMessage = 'Live PIREP data is unavailable right now. Cross-check with an official briefing source.';
   
   try {
-    // Fetch PIREPs from aviationweather.gov
     let url = `https://aviationweather.gov/api/data/pirep?format=json&age=${hours}`;
     
     if (bounds) {
@@ -54,14 +56,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      // Return sample data if API fails
-      return NextResponse.json(getSamplePireps());
+      return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
     }
 
     const data = await response.json();
     
     if (!Array.isArray(data)) {
-      return NextResponse.json(getSamplePireps());
+      return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
     }
 
     const pireps: PirepData[] = data.map((p: any, i: number) => ({
@@ -92,54 +93,9 @@ export async function GET(request: NextRequest) {
       rawText: p.rawOb || p.rawText || ''
     }));
 
-    return NextResponse.json(pireps);
+    return NextResponse.json(buildLiveOverlayResponse(pireps));
   } catch (error) {
     console.error('PIREP fetch error:', error);
-    return NextResponse.json(getSamplePireps());
+    return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
   }
-}
-
-function getSamplePireps(): PirepData[] {
-  const now = new Date();
-  return [
-    {
-      id: 'pirep-demo-1',
-      receiptTime: now.toISOString(),
-      obsTime: new Date(now.getTime() - 30 * 60000).toISOString(),
-      icaoId: 'KORD',
-      lat: 42.1,
-      lon: -87.8,
-      altitude: 12000,
-      aircraftType: 'B737',
-      reportType: 'PIREP',
-      turbulence: { intensity: 'MOD', type: 'CHOP' },
-      rawText: 'ORD UA /OV ORD/TM 1430/FL120/TP B737/TB MOD CHOP'
-    },
-    {
-      id: 'pirep-demo-2',
-      receiptTime: now.toISOString(),
-      obsTime: new Date(now.getTime() - 45 * 60000).toISOString(),
-      icaoId: 'KJFK',
-      lat: 40.8,
-      lon: -73.6,
-      altitude: 8000,
-      aircraftType: 'C172',
-      reportType: 'PIREP',
-      icing: { intensity: 'LGT', type: 'RIME' },
-      rawText: 'JFK UA /OV JFK/TM 1415/FL080/TP C172/IC LGT RIME'
-    },
-    {
-      id: 'pirep-demo-3',
-      receiptTime: now.toISOString(),
-      obsTime: new Date(now.getTime() - 15 * 60000).toISOString(),
-      icaoId: 'KATL',
-      lat: 33.8,
-      lon: -84.3,
-      altitude: 18000,
-      aircraftType: 'A320',
-      reportType: 'URGENT',
-      turbulence: { intensity: 'SEV' },
-      rawText: 'ATL UUA /OV ATL/TM 1500/FL180/TP A320/TB SEV'
-    },
-  ];
 }

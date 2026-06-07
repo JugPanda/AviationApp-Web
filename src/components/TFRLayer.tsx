@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Circle, Polygon, Popup, useMap } from 'react-leaflet';
 
+import MapLayerNotice from '@/components/MapLayerNotice';
+import { isOverlayResponse } from '@/lib/overlay-response';
+
 interface TfrData {
   id: string;
   name: string;
@@ -17,7 +20,7 @@ interface TfrData {
   coordinates: {
     type: 'circle' | 'polygon';
     center?: { lat: number; lng: number };
-    radius?: number; // nautical miles
+    radius?: number;
     points?: { lat: number; lng: number }[];
   };
   isActive: boolean;
@@ -28,17 +31,14 @@ interface TFRLayerProps {
   visible: boolean;
 }
 
-// Convert nautical miles to meters for Leaflet
 const nmToMeters = (nm: number) => nm * 1852;
 
-// Format altitude for display
 const formatAltitude = (alt: number): string => {
   if (alt === 0) return 'SFC';
   if (alt >= 18000) return `FL${Math.round(alt / 100)}`;
   return `${alt.toLocaleString()} ft`;
 };
 
-// Format date for display
 const formatDate = (isoDate: string): string => {
   try {
     const date = new Date(isoDate);
@@ -47,75 +47,74 @@ const formatDate = (isoDate: string): string => {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      timeZoneName: 'short'
+      timeZoneName: 'short',
     });
   } catch {
     return isoDate;
   }
 };
 
-// Get color based on TFR type
 const getTfrColor = (type: string, isActive: boolean): string => {
-  if (!isActive) return '#6b7280'; // gray for inactive
-  
+  if (!isActive) return '#6b7280';
+
   switch (type.toUpperCase()) {
     case 'VIP':
-      return '#dc2626'; // red
+      return '#dc2626';
     case 'HAZARD':
     case 'FIRE':
-      return '#f97316'; // orange
+      return '#f97316';
     case 'STADIUM':
     case 'SPORTING':
-      return '#eab308'; // yellow
+      return '#eab308';
     case 'SECURITY':
-      return '#7c3aed'; // purple
+      return '#7c3aed';
     default:
-      return '#ef4444'; // default red
+      return '#ef4444';
   }
 };
 
 export default function TFRLayer({ visible }: TFRLayerProps) {
   const [tfrs, setTfrs] = useState<TfrData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const map = useMap();
 
   useEffect(() => {
     if (!visible) return;
 
     const fetchTfrs = async () => {
-      setLoading(true);
-      setError(null);
-      
       try {
-        // Get map bounds for filtering
         const bounds = map.getBounds();
         const boundsParam = `${bounds.getSouth()},${bounds.getNorth()},${bounds.getWest()},${bounds.getEast()}`;
-        
         const response = await fetch(`/api/tfr?bounds=${boundsParam}`);
-        if (!response.ok) throw new Error('Failed to fetch TFRs');
-        
         const data = await response.json();
+
+        if (isOverlayResponse<TfrData>(data)) {
+          setTfrs(data.items);
+          setNotice(data.status === 'unavailable' ? data.message ?? 'Live TFR data is unavailable right now.' : null);
+          return;
+        }
+
         if (Array.isArray(data)) {
           setTfrs(data);
+          setNotice(null);
+          return;
         }
+
+        throw new Error('Unexpected TFR response shape');
       } catch (err) {
         console.error('TFR fetch error:', err);
-        setError('Failed to load TFRs');
-      } finally {
-        setLoading(false);
+        setTfrs([]);
+        setNotice('Unable to load live TFR data right now. Cross-check with an official FAA briefing source.');
       }
     };
 
-    fetchTfrs();
-    
-    // Refetch when map moves
-    const onMoveEnd = () => fetchTfrs();
+    void fetchTfrs();
+
+    const onMoveEnd = () => void fetchTfrs();
     map.on('moveend', onMoveEnd);
-    
-    // Refresh every 5 minutes
-    const interval = setInterval(fetchTfrs, 5 * 60 * 1000);
-    
+
+    const interval = setInterval(() => void fetchTfrs(), 5 * 60 * 1000);
+
     return () => {
       map.off('moveend', onMoveEnd);
       clearInterval(interval);
@@ -126,6 +125,7 @@ export default function TFRLayer({ visible }: TFRLayerProps) {
 
   return (
     <>
+      <MapLayerNotice message={notice} position="bottom-left" tone="red" />
       {tfrs.map((tfr) => {
         const color = getTfrColor(tfr.type, tfr.isActive);
         const fillOpacity = tfr.isActive ? 0.25 : 0.1;
@@ -134,23 +134,17 @@ export default function TFRLayer({ visible }: TFRLayerProps) {
 
         const popupContent = (
           <div className="min-w-[200px] max-w-[300px]">
-            <div className="font-bold text-red-600 text-sm mb-1">
-              ⚠️ TFR - {tfr.type}
-            </div>
+            <div className="font-bold text-red-600 text-sm mb-1">⚠️ TFR - {tfr.type}</div>
             <div className="text-xs space-y-1">
               <p className="font-medium">{tfr.name}</p>
-              {tfr.notamNumber && (
-                <p className="text-gray-600">{tfr.notamNumber}</p>
-              )}
+              {tfr.notamNumber && <p className="text-gray-600">{tfr.notamNumber}</p>}
               <div className="border-t pt-1 mt-1">
                 <p><strong>Altitude:</strong> {formatAltitude(tfr.altitudeLow)} to {formatAltitude(tfr.altitudeHigh)}</p>
                 <p><strong>Effective:</strong> {formatDate(tfr.effectiveStart)}</p>
                 <p><strong>Expires:</strong> {formatDate(tfr.effectiveEnd)}</p>
                 {tfr.facility && <p><strong>Facility:</strong> {tfr.facility}</p>}
               </div>
-              {tfr.description && (
-                <p className="border-t pt-1 mt-1 text-gray-700">{tfr.description}</p>
-              )}
+              {tfr.description && <p className="border-t pt-1 mt-1 text-gray-700">{tfr.description}</p>}
               <p className={`font-bold mt-1 ${tfr.isActive ? 'text-red-600' : 'text-gray-500'}`}>
                 {tfr.isActive ? '🔴 ACTIVE' : '⚪ Upcoming/Expired'}
               </p>
@@ -169,7 +163,7 @@ export default function TFRLayer({ visible }: TFRLayerProps) {
                 fillColor: color,
                 fillOpacity,
                 weight,
-                dashArray
+                dashArray,
               }}
             >
               <Popup>{popupContent}</Popup>
@@ -178,7 +172,7 @@ export default function TFRLayer({ visible }: TFRLayerProps) {
         }
 
         if (tfr.coordinates.type === 'polygon' && tfr.coordinates.points) {
-          const positions = tfr.coordinates.points.map(p => [p.lat, p.lng] as [number, number]);
+          const positions = tfr.coordinates.points.map((p) => [p.lat, p.lng] as [number, number]);
           return (
             <Polygon
               key={tfr.id}
@@ -188,7 +182,7 @@ export default function TFRLayer({ visible }: TFRLayerProps) {
                 fillColor: color,
                 fillOpacity,
                 weight,
-                dashArray
+                dashArray,
               }}
             >
               <Popup>{popupContent}</Popup>

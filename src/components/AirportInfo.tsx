@@ -250,6 +250,8 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         <button
           onClick={onClose}
           className="p-1 text-slate-400 hover:text-white transition-colors"
+          aria-label={`Close airport briefing for ${airport.icaoId || 'selected airport'}`}
+          title="Close airport briefing"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

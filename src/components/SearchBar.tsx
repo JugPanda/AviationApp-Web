@@ -20,7 +20,11 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex gap-1.5 sm:gap-2">
+      <label htmlFor="airport-search" className="sr-only">
+        Search airport by ICAO code
+      </label>
       <input
+        id="airport-search"
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value.toUpperCase())}
@@ -28,11 +32,17 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
         className="flex-1 min-w-0 px-3 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
         maxLength={4}
         title="Enter 4-letter ICAO code (e.g., KJFK for JFK Airport)"
+        aria-describedby="airport-search-help"
       />
+      <span id="airport-search-help" className="sr-only">
+        Enter a four-letter ICAO airport code such as KJFK.
+      </span>
       <button
         type="submit"
         disabled={isLoading || !query.trim()}
         className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors text-sm sm:text-base flex-shrink-0"
+        aria-label={isLoading ? 'Searching airport' : 'Search airport by ICAO code'}
+        title="Search airport by ICAO code"
       >
         {isLoading ? (
           <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">

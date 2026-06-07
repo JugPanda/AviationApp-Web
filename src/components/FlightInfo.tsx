@@ -26,10 +26,12 @@ const formatCoordinate = (value: number, positiveLabel: string, negativeLabel: s
 export default function FlightInfo({ flight, onClose, onTrack, isTracking }: FlightInfoProps) {
   return (
     <div className="p-4">
-      {/* Close button - desktop only */}
+      {/* Close button */}
       <button
         onClick={onClose}
-        className="hidden md:block absolute top-2 right-2 p-1 hover:bg-slate-800 rounded"
+        className="absolute top-2 right-2 p-1 hover:bg-slate-800 rounded"
+        aria-label={`Close flight details for ${flight.callsign || flight.icao24}`}
+        title="Close flight details"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

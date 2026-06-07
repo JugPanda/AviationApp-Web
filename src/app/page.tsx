@@ -598,6 +598,8 @@ export default function Home() {
           onClick={handleRefresh}
           disabled={isLoading}
           className="sm:hidden absolute top-3 right-3 w-10 h-10 bg-slate-900/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-lg disabled:opacity-50"
+          aria-label={isLoading ? 'Refreshing aviation weather map' : 'Refresh aviation weather map'}
+          title="Refresh aviation weather map"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -663,7 +665,7 @@ export default function Home() {
       {showQuickActions && (
         <>
           <div className="sm:hidden fixed inset-0 bg-black/40 z-[999]" onClick={() => setShowQuickActions(false)} />
-          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto">
+          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Briefing workspace quick actions">
             <div className="flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
@@ -742,7 +744,7 @@ export default function Home() {
       {showLayers && (
         <>
           <div className="sm:hidden fixed inset-0 bg-black/40 z-[999]" onClick={() => setShowLayers(false)} />
-          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto">
+          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Map layers">
             <div className="flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
@@ -798,7 +800,7 @@ export default function Home() {
       {showFiltersPanel && (
         <>
           <div className="sm:hidden fixed inset-0 bg-black/40 z-[999]" onClick={() => setShowFiltersPanel(false)} />
-          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto">
+          <div className="sm:hidden fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 bg-slate-900 border-t border-slate-700 rounded-t-2xl z-[1000] max-h-[60vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Airport weather filters">
             <div className="flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
@@ -890,7 +892,7 @@ export default function Home() {
       {selectedAirport && (
         <>
           <div className="md:hidden fixed inset-0 bg-black/50 z-[1000]" onClick={() => setSelectedAirport(null)} />
-          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none">
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none" role="dialog" aria-modal="true" aria-label={`Airport briefing for ${selectedAirport.icaoId}`}>
             <div className="md:hidden flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
@@ -903,7 +905,7 @@ export default function Home() {
       {selectedFlight && (
         <>
           <div className="md:hidden fixed inset-0 bg-black/50 z-[1000]" onClick={() => setSelectedFlight(null)} />
-          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none">
+          <div className="fixed md:static bottom-0 left-0 right-0 md:w-96 max-h-[70vh] md:max-h-none bg-slate-900 border-t md:border-t-0 md:border-l border-slate-700 overflow-y-auto z-[1001] rounded-t-2xl md:rounded-none" role="dialog" aria-modal="true" aria-label={`Flight details for ${selectedFlight.callsign || selectedFlight.icao24}`}>
             <div className="md:hidden flex justify-center py-2">
               <div className="w-10 h-1 bg-slate-600 rounded-full" />
             </div>
@@ -936,6 +938,8 @@ function ToolbarButton({
         active ? `${activeColor} text-white shadow-lg` : 'hover:bg-slate-800 text-slate-400 hover:text-white'
       }`}
       title={label}
+      aria-label={label}
+      aria-pressed={active}
     >
       {children}
       <span className="hidden lg:inline">{label}</span>
@@ -951,7 +955,7 @@ function BottomNavItem({
 }) {
   if (href) {
     return (
-      <Link href={href} className="flex flex-1 min-w-0 flex-col items-center justify-center rounded-lg py-1 relative">
+      <Link href={href} className="flex flex-1 min-w-0 flex-col items-center justify-center rounded-lg py-1 relative" aria-label={label}>
         <div className="text-slate-400">{icon}</div>
         <span className="text-[10px] text-slate-500 mt-0.5">{label}</span>
       </Link>
@@ -964,6 +968,8 @@ function BottomNavItem({
       className={`flex flex-1 min-w-0 flex-col items-center justify-center rounded-lg py-1 relative transition-colors ${
         active ? 'text-blue-400' : ''
       }`}
+      aria-label={label}
+      aria-pressed={active}
     >
       <div className={`relative ${active ? 'text-blue-400' : 'text-slate-400'}`}>
         {icon}
@@ -997,6 +1003,8 @@ function LayerToggle({
       className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all ${
         active ? 'bg-slate-800 border border-slate-600' : 'bg-slate-800/40 border border-transparent'
       }`}
+      aria-label={`${label}: ${active ? 'on' : 'off'}`}
+      aria-pressed={active}
     >
       <span className="text-xl">{icon}</span>
       <div className="flex-1 text-left">
