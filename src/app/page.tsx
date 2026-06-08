@@ -10,6 +10,7 @@ import MapBrief from '@/components/MapBrief';
 import PwaStatus from '@/components/PwaStatus';
 import { FlightData } from '@/components/FlightMarkers';
 import { MetarData } from '@/types';
+import { formatCacheAge, getCacheFreshness } from '@/lib/cache-freshness';
 import { findBestTrackedFlight, getTrackedRefreshQuery, isFlightTracked, normalizeFlightIdentifier } from '@/lib/flight-tracking';
 import { getFlightCategoryColor } from '@/lib/utils';
 import { US_STATES, US_REGIONS } from '@/lib/airports';
@@ -17,20 +18,55 @@ import { US_STATES, US_REGIONS } from '@/lib/airports';
 const FLIGHT_CATEGORIES = ['VFR', 'MVFR', 'IFR', 'LIFR'] as const;
 const RECENT_BRIEFINGS_KEY = 'avweather-recent-briefings';
 
-function loadRecentBriefings(): MetarData[] {
+interface RecentBriefing {
+  airport: MetarData;
+  cachedAt: number;
+}
+
+function loadRecentBriefings(): RecentBriefing[] {
   if (typeof window === 'undefined') return [];
   try {
     const saved = window.localStorage.getItem(RECENT_BRIEFINGS_KEY);
     const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .slice(0, 6)
+      .map((item) => {
+        if (item?.airport?.icaoId) {
+          return {
+            airport: item.airport as MetarData,
+            cachedAt: typeof item.cachedAt === 'number' ? item.cachedAt : Date.now(),
+          } satisfies RecentBriefing;
+        }
+
+        if (item?.icaoId) {
+          return {
+            airport: item as MetarData,
+            cachedAt: Date.now(),
+          } satisfies RecentBriefing;
+        }
+
+        return null;
+      })
+      .filter((item): item is RecentBriefing => item !== null);
   } catch {
     return [];
   }
 }
 
-function saveRecentBriefings(briefings: MetarData[]) {
+function saveRecentBriefings(briefings: RecentBriefing[]) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(RECENT_BRIEFINGS_KEY, JSON.stringify(briefings.slice(0, 6)));
+}
+
+function getRecentBriefingTone(cachedAt: number) {
+  const freshness = getCacheFreshness(cachedAt);
+  if (freshness === 'expired') return 'border-red-500/30 bg-red-500/10 text-red-100';
+  if (freshness === 'stale') return 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+  return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
 }
 
 export default function Home() {
@@ -74,7 +110,7 @@ export default function Home() {
   const [showLayers, setShowLayers] = useState(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
-  const [recentBriefings, setRecentBriefings] = useState<MetarData[]>(() => loadRecentBriefings());
+  const [recentBriefings, setRecentBriefings] = useState<RecentBriefing[]>(() => loadRecentBriefings());
 
   const toggleFilter = (category: string) => {
     setFilters(prev => ({ ...prev, [category]: !prev[category] }));
@@ -127,7 +163,8 @@ export default function Home() {
     if (!selectedAirport?.icaoId) return;
 
     setRecentBriefings(prev => {
-      const next = [selectedAirport, ...prev.filter((item) => item.icaoId !== selectedAirport.icaoId)].slice(0, 6);
+      const nextEntry = { airport: selectedAirport, cachedAt: Date.now() };
+      const next = [nextEntry, ...prev.filter((item) => item.airport.icaoId !== selectedAirport.icaoId)].slice(0, 6);
       saveRecentBriefings(next);
       return next;
     });
@@ -502,20 +539,23 @@ export default function Home() {
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {recentBriefings.map((briefing) => (
                   <button
-                    key={briefing.icaoId}
-                    onClick={() => setSelectedAirport(briefing)}
+                    key={briefing.airport.icaoId}
+                    onClick={() => setSelectedAirport(briefing.airport)}
                     className="shrink-0 rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-left hover:border-slate-500"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">{briefing.icaoId}</span>
+                      <span className="text-sm font-semibold text-white">{briefing.airport.icaoId}</span>
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                        style={{ backgroundColor: getFlightCategoryColor(briefing.fltCat ?? null) }}
+                        style={{ backgroundColor: getFlightCategoryColor(briefing.airport.fltCat ?? null) }}
                       >
-                        {briefing.fltCat ?? 'N/A'}
+                        {briefing.airport.fltCat ?? 'N/A'}
                       </span>
                     </div>
-                    <div className="mt-1 max-w-[9rem] truncate text-xs text-slate-400">{briefing.name || 'Airport briefing'}</div>
+                    <div className="mt-1 max-w-[9rem] truncate text-xs text-slate-400">{briefing.airport.name || 'Airport briefing'}</div>
+                    <div className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getRecentBriefingTone(briefing.cachedAt)}`}>
+                      {formatCacheAge(briefing.cachedAt)}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -716,19 +756,22 @@ export default function Home() {
                   <div className="space-y-2">
                     {recentBriefings.slice(0, 4).map((briefing) => (
                       <button
-                        key={briefing.icaoId}
-                        onClick={() => { setSelectedAirport(briefing); setShowQuickActions(false); }}
+                        key={briefing.airport.icaoId}
+                        onClick={() => { setSelectedAirport(briefing.airport); setShowQuickActions(false); }}
                         className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-left"
                       >
                         <div>
-                          <div className="text-sm font-semibold text-white">{briefing.icaoId}</div>
-                          <div className="text-xs text-slate-400 truncate">{briefing.name || 'Airport briefing'}</div>
+                          <div className="text-sm font-semibold text-white">{briefing.airport.icaoId}</div>
+                          <div className="text-xs text-slate-400 truncate">{briefing.airport.name || 'Airport briefing'}</div>
+                          <div className={`mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getRecentBriefingTone(briefing.cachedAt)}`}>
+                            {formatCacheAge(briefing.cachedAt)}
+                          </div>
                         </div>
                         <span
                           className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                          style={{ backgroundColor: getFlightCategoryColor(briefing.fltCat ?? null) }}
+                          style={{ backgroundColor: getFlightCategoryColor(briefing.airport.fltCat ?? null) }}
                         >
-                          {briefing.fltCat ?? 'N/A'}
+                          {briefing.airport.fltCat ?? 'N/A'}
                         </span>
                       </button>
                     ))}

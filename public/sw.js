@@ -1,5 +1,5 @@
-const CACHE_NAME = 'avweather-shell-v1';
-const API_CACHE = 'avweather-api-v1';
+const CACHE_NAME = 'avweather-shell-v2';
+const API_CACHE = 'avweather-api-v2';
 const SHELL_URLS = [
   '/',
   '/tools',
@@ -72,10 +72,15 @@ async function networkFirstPage(request) {
 }
 
 async function networkFirstApi(request) {
+  const cache = await caches.open(API_CACHE);
+
   try {
     const response = await fetch(request);
-    const cache = await caches.open(API_CACHE);
-    cache.put(request, response.clone());
+    if (await shouldCacheApiResponse(response)) {
+      await cache.put(request, response.clone());
+    } else {
+      await cache.delete(request);
+    }
     return response;
   } catch {
     const cached = await caches.match(request);
@@ -91,6 +96,33 @@ async function networkFirstApi(request) {
       headers: { 'Content-Type': 'application/json' },
       status: 503,
     });
+  }
+}
+
+async function shouldCacheApiResponse(response) {
+  if (!response.ok) {
+    return false;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return true;
+  }
+
+  try {
+    const payload = await response.clone().json();
+    if (payload?.offline === true) {
+      return false;
+    }
+    if (payload?.status === 'unavailable') {
+      return false;
+    }
+    if (payload?.unavailable === true) {
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
   }
 }
 

@@ -11,6 +11,7 @@ import {
   formatObsTime,
   cn
 } from '@/lib/utils';
+import { formatCacheAge, getCacheFreshness } from '@/lib/cache-freshness';
 import WindDisplay from '@/components/weather/WindDisplay';
 import CloudVisualization from '@/components/weather/CloudVisualization';
 
@@ -134,11 +135,13 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
   const [notamLoading, setNotamLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notamNotice, setNotamNotice] = useState<string | null>(null);
+  const [briefingCachedAt, setBriefingCachedAt] = useState<number | null>(null);
   
   useEffect(() => {
     if (!airport?.icaoId) return;
 
     const cached = loadCachedBriefing(airport.icaoId);
+    setBriefingCachedAt(cached?.cachedAt ?? null);
     if (cached?.details) {
       setDetails(cached.details);
     }
@@ -161,6 +164,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
       .then(data => {
         setDetails(data);
         saveCachedBriefing(airport.icaoId, { details: data });
+        setBriefingCachedAt(Date.now());
         setLoading(false);
       })
       .catch(err => {
@@ -189,6 +193,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         if (Array.isArray(data) && data.length > 0) {
           setTafData(data[0]);
           saveCachedBriefing(airport.icaoId, { taf: data[0] });
+          setBriefingCachedAt(Date.now());
         } else {
           setTafData(null);
         }
@@ -218,6 +223,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         setNotams(nextNotams);
         setNotamNotice(nextNotice);
         saveCachedBriefing(airport.icaoId, { notams: nextNotams, notamNotice: nextNotice });
+        setBriefingCachedAt(Date.now());
       } catch {
         setNotams(cached?.notams ?? []);
         setNotamNotice(cached?.notams?.length ? 'Showing cached NOTAMs. Reconnect to refresh live data.' : 'Unable to load NOTAMs right now.');
@@ -233,6 +239,12 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
 
   const fltCat = airport.fltCat ?? null;
   const faaId = icaoToFaa(airport.icaoId || '');
+  const cacheFreshness = getCacheFreshness(briefingCachedAt);
+  const cacheTone = cacheFreshness === 'expired'
+    ? 'border-red-500/30 bg-red-500/10 text-red-100'
+    : cacheFreshness === 'stale'
+      ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
 
   return (
     <div className="bg-slate-800 md:rounded-lg md:border md:border-slate-700 overflow-hidden">
@@ -270,6 +282,12 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
             <span>• Elev: {details.airport.elevation_ft.toLocaleString()} ft</span>
           )}
         </div>
+        {briefingCachedAt && (
+          <div className={`mt-2 inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium ${cacheTone}`}>
+            {formatCacheAge(briefingCachedAt)}
+            {cacheFreshness !== 'fresh' && <span className="ml-1">• verify before relying</span>}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
