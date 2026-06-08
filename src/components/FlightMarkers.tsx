@@ -8,6 +8,8 @@ import { isFlightTracked } from '@/lib/flight-tracking';
 export interface FlightData {
   icao24: string;
   callsign: string;
+  registration?: string | null;
+  aircraftType?: string | null;
   originCountry: string;
   longitude: number;
   latitude: number;
@@ -91,7 +93,9 @@ export default function FlightMarkers({ flights, trackedFlight, onFlightSelect }
             <Popup>
               <div className="text-sm min-w-[180px]">
                 <div className="font-bold text-lg text-blue-600">{flight.callsign}</div>
-                <div className="text-gray-500 text-xs mb-2">{flight.icao24} • {flight.originCountry}</div>
+                <div className="text-gray-500 text-xs mb-2">
+                  {[flight.registration, flight.icao24, flight.aircraftType].filter(Boolean).join(' • ')}
+                </div>
                 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>

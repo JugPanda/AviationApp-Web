@@ -11,7 +11,7 @@ import PwaStatus from '@/components/PwaStatus';
 import { FlightData } from '@/components/FlightMarkers';
 import { MetarData } from '@/types';
 import { formatCacheAge, getCacheFreshness } from '@/lib/cache-freshness';
-import { findBestTrackedFlight, getTrackedRefreshQuery, isFlightTracked, normalizeFlightIdentifier } from '@/lib/flight-tracking';
+import { findBestTrackedFlight, getFlightDisplayLabel, getFlightSearchHint, getTrackedRefreshQuery, isFlightTracked, normalizeFlightIdentifier } from '@/lib/flight-tracking';
 import { getFlightCategoryColor } from '@/lib/utils';
 import { US_STATES, US_REGIONS } from '@/lib/airports';
 
@@ -21,6 +21,23 @@ const RECENT_BRIEFINGS_KEY = 'avweather-recent-briefings';
 interface RecentBriefing {
   airport: MetarData;
   cachedAt: number;
+}
+
+function mergeFlightResults(...flightGroups: FlightData[][]): FlightData[] {
+  const merged = new Map<string, FlightData>()
+
+  for (const flights of flightGroups) {
+    for (const flight of flights) {
+      const key = normalizeFlightIdentifier(flight.icao24)
+      if (!key) {
+        continue
+      }
+
+      merged.set(key, flight)
+    }
+  }
+
+  return [...merged.values()]
 }
 
 function loadRecentBriefings(): RecentBriefing[] {
@@ -174,17 +191,38 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchAirports]);
 
-  const fetchFlights = useCallback(async (callsign?: string) => {
+  const fetchFlights = useCallback(async (query?: string) => {
     setFlightsLoading(true);
     try {
-      let url = '/api/flights?bounds=24.396308,49.384358,-125.0,-66.93457';
-      if (callsign) url = `/api/flights?callsign=${encodeURIComponent(callsign)}`;
-      const res = await fetch(url);
+      const generalTrafficRequest = fetch('/api/flights?bounds=24.396308,49.384358,-125.0,-66.93457');
+
+      if (query) {
+        const [generalRes, targetedRes] = await Promise.all([
+          generalTrafficRequest,
+          fetch(`/api/flights?query=${encodeURIComponent(query)}`),
+        ]);
+
+        const [generalData, targetedData] = await Promise.all([
+          generalRes.json(),
+          targetedRes.json(),
+        ]);
+
+        const mergedTraffic = mergeFlightResults(
+          Array.isArray(generalData) ? generalData as FlightData[] : [],
+          Array.isArray(targetedData) ? targetedData as FlightData[] : [],
+        );
+
+        setFlights(mergedTraffic);
+        return mergedTraffic;
+      }
+
+      const res = await generalTrafficRequest;
       const data = await res.json();
       if (Array.isArray(data)) {
         setFlights(data);
         return data as FlightData[];
       }
+
       return [] as FlightData[];
     } catch (err) {
       console.error('Failed to fetch flights:', err);
@@ -219,8 +257,8 @@ export default function Home() {
     setSelectedAirport(null);
     setFlightSearchSummary(
       bestMatch
-        ? `Tracking ${normalizeFlightIdentifier(bestMatch.callsign) || bestMatch.icao24} • ${results.length} match${results.length === 1 ? '' : 'es'}`
-        : `No live flight match found for ${query}`
+        ? `Tracking ${getFlightDisplayLabel(bestMatch)} • live traffic stays visible on the map`
+        : `No live aircraft found for ${query}. Try the painted tail number, live callsign, or exact 6-character hex.`
     );
   };
 
@@ -245,7 +283,7 @@ export default function Home() {
     setTrackedFlightQuery(getTrackedRefreshQuery(selected));
     setFlightSearchSummary(
       selected
-        ? `Tracking ${normalizeFlightIdentifier(selected.callsign) || selected.icao24}`
+        ? `Tracking ${getFlightDisplayLabel(selected)}`
         : 'Tracking selected flight'
     );
 
@@ -301,10 +339,11 @@ export default function Home() {
       ? (US_REGIONS[selectedRegion]?.name ?? 'Region')
       : 'All US';
   const trackedFlightLabel = selectedFlight
-    ? normalizeFlightIdentifier(selectedFlight.callsign) || selectedFlight.icao24
+    ? getFlightDisplayLabel(selectedFlight)
     : trackedFlight
       ? normalizeFlightIdentifier(trackedFlight)
       : null;
+  const flightSearchHint = getFlightSearchHint(flightSearch);
 
   return (
     <main className="h-[100dvh] flex flex-col bg-slate-950">
@@ -424,8 +463,10 @@ export default function Home() {
                 type="text"
                 value={flightSearch}
                 onChange={(e) => setFlightSearch(e.target.value.toUpperCase())}
-                placeholder="Callsign (e.g. UAL123)"
+                placeholder="Tail, callsign, or hex"
                 className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm placeholder:text-slate-500 min-w-0"
+                aria-describedby="flight-search-help"
+                title="Examples: N576FX, G-KELS, LXJ576, A76546"
               />
               <button type="submit" className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium shrink-0">
                 Track
@@ -446,9 +487,16 @@ export default function Home() {
             )}
           </div>
         )}
-        {showFlights && flightSearchSummary && (
-          <div className="mt-2 text-xs text-slate-400">
-            {flightSearchSummary}
+        {showFlights && (
+          <div className="mt-2 space-y-1 text-xs">
+            <div id="flight-search-help" className="text-slate-500">
+              {flightSearchHint}
+            </div>
+            {flightSearchSummary && (
+              <div className="text-slate-300">
+                {flightSearchSummary}
+              </div>
+            )}
           </div>
         )}
 

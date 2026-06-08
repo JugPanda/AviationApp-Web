@@ -46,7 +46,7 @@ export default function FlightInfo({ flight, onClose, onTrack, isTracking }: Fli
             {flight.callsign}
           </h2>
           <p className="text-sm text-slate-400">
-            {flight.icao24} • {flight.originCountry}
+            {[flight.registration, flight.icao24, flight.aircraftType, flight.originCountry].filter(Boolean).join(' • ')}
           </p>
         </div>
         
