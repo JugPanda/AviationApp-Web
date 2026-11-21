@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMap } from 'react-leaflet';
 
@@ -28,11 +27,9 @@ export default function MapLayerNotice({
   tone = 'amber',
 }: MapLayerNoticeProps) {
   const map = useMap();
-  const [host, setHost] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    setHost(map.getContainer().parentElement);
-  }, [map]);
+  // The Leaflet context already owns a mounted map container. Its parent is
+  // derived from that context, not separately mirrored in React state.
+  const host = map.getContainer().parentElement;
 
   if (!message || !host) {
     return null;

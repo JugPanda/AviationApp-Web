@@ -68,7 +68,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function parseSigmet(item: any): SigmetData {
+interface RawSigmet {
+  coords?: number[][]; validTimeFrom?: string; issueTime?: string; validTimeTo?: string;
+  airSigmetId?: string; isigmetId?: string; airSigmetType?: string; hazard?: string; severity?: string;
+  altLow1?: number; altitudeLo?: number; altHi1?: number; altitudeHi?: number; rawAirSigmet?: string; rawText?: string;
+}
+
+function parseSigmet(item: RawSigmet): SigmetData {
   const now = new Date();
   
   // Parse coordinates from various formats

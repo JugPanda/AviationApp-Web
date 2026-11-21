@@ -21,7 +21,7 @@ export default function CrosswindCalculator() {
   );
 
   // Visual runway/wind diagram
-  const WindDiagram = () => {
+  const renderWindDiagram = () => {
     const size = 200;
     const center = size / 2;
     const runwayLength = 70;
@@ -192,7 +192,7 @@ export default function CrosswindCalculator() {
       {/* Wind Diagram */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">Wind Diagram</h4>
-        <WindDiagram />
+        {renderWindDiagram()}
         <p className="text-center text-xs text-slate-500 mt-2">
           Wind from {windDirection}° at {windSpeed}kt
           {gustSpeed !== '' && ` gusting ${gustSpeed}kt`}

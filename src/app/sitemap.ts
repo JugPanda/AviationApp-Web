@@ -4,30 +4,28 @@ import { getSiteUrl } from '@/lib/site-url';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const siteUrl = getSiteUrl();
-  const now = new Date();
 
   return [
+    { url: `${siteUrl}/map`, changeFrequency: "daily", priority: 0.9 },
+    { url: `${siteUrl}/about`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${siteUrl}/privacy`, changeFrequency: "monthly", priority: 0.3 },
     {
       url: `${siteUrl}/`,
-      lastModified: now,
-      changeFrequency: 'hourly',
+      changeFrequency: 'monthly',
       priority: 1,
     },
     {
       url: `${siteUrl}/tools`,
-      lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
       url: `${siteUrl}/plan`,
-      lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.7,
     },
     {
       url: `${siteUrl}/logbook`,
-      lastModified: now,
       changeFrequency: 'weekly',
       priority: 0.7,
     },

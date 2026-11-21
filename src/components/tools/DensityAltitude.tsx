@@ -1,32 +1,56 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useHydrated } from '@/lib/use-hydrated';
+
+interface DensityAltitudePreferences {
+  fieldElevation: number;
+  tempUnit: 'C' | 'F';
+}
+
+function readPreferences(): DensityAltitudePreferences {
+  const defaults: DensityAltitudePreferences = { fieldElevation: 0, tempUnit: 'C' };
+  try {
+    const saved = localStorage.getItem('density-alt-prefs');
+    if (!saved) return defaults;
+    const data: unknown = JSON.parse(saved);
+    if (typeof data !== 'object' || data === null) return defaults;
+    return {
+      fieldElevation: 'fieldElevation' in data && typeof data.fieldElevation === 'number' && Number.isFinite(data.fieldElevation)
+        ? data.fieldElevation : defaults.fieldElevation,
+      tempUnit: 'tempUnit' in data && (data.tempUnit === 'C' || data.tempUnit === 'F')
+        ? data.tempUnit : defaults.tempUnit,
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 export default function DensityAltitude() {
-  const [fieldElevation, setFieldElevation] = useState(0);
+  // Keep server HTML and the first hydration render identical. Mount the form
+  // only on the client, so its lazy initializer reads saved data before saving.
+  const hydrated = useHydrated();
+  return hydrated ? <DensityAltitudeForm /> : <p role="status">Loading saved preferences…</p>;
+}
+
+function DensityAltitudeForm() {
+  const [preferences] = useState(readPreferences);
+  const [fieldElevation, setFieldElevation] = useState(preferences.fieldElevation);
   const [temperature, setTemperature] = useState(15);
-  const [tempUnit, setTempUnit] = useState<'C' | 'F'>('C');
+  const [tempUnit, setTempUnit] = useState<'C' | 'F'>(preferences.tempUnit);
   const [altimeter, setAltimeter] = useState(29.92);
   const [dewpoint, setDewpoint] = useState<number | ''>('');
 
-  // Load saved preferences
-  useEffect(() => {
-    const saved = localStorage.getItem('density-alt-prefs');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        if (data.fieldElevation) setFieldElevation(data.fieldElevation);
-        if (data.tempUnit) setTempUnit(data.tempUnit);
-      } catch {}
-    }
-  }, []);
-
   // Save preferences
   useEffect(() => {
-    localStorage.setItem('density-alt-prefs', JSON.stringify({
-      fieldElevation,
-      tempUnit
-    }));
+    try {
+      localStorage.setItem('density-alt-prefs', JSON.stringify({
+        fieldElevation,
+        tempUnit
+      }));
+    } catch {
+      // Storage may be blocked or full; keep the calculator usable in memory.
+    }
   }, [fieldElevation, tempUnit]);
 
   const calculations = useMemo(() => {
@@ -110,7 +134,7 @@ export default function DensityAltitude() {
   }, [fieldElevation, temperature, tempUnit, altimeter, dewpoint]);
 
   // Visual gauge for density altitude
-  const DensityAltitudeGauge = () => {
+  const renderDensityAltitudeGauge = () => {
     const maxDA = 12000;
     const percentage = Math.min(Math.max(calculations.densityAltitude / maxDA, 0), 1);
     const circumference = 2 * Math.PI * 80;
@@ -236,7 +260,7 @@ export default function DensityAltitude() {
       {/* Results */}
       <div className="bg-slate-800/50 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-center mb-4">Density Altitude</h3>
-        <DensityAltitudeGauge />
+        {renderDensityAltitudeGauge()}
         
         <div className={`text-center mt-4 ${calculations.performanceColor}`}>
           <span className="font-medium">{calculations.performanceDescription}</span>

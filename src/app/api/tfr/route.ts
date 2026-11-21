@@ -78,9 +78,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function parseFaaTfrs(data: any): TfrData[] {
+interface RawTfr {
+  id: string; properties?: Record<string, string>;
+  geometry?: { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] };
+  notamNumber: string; description: string; type: string; facility: string; state: string;
+  effectiveStart: string; startDate: string; effectiveEnd: string; endDate: string;
+  lowAlt: number; highAlt: number; radius?: number; latitude?: number; longitude?: number; coordinates?: number[][];
+}
+interface RawTfrResponse { features?: RawTfr[]; items?: RawTfr[]; }
+
+function parseFaaTfrs(data: RawTfrResponse): TfrData[] {
   if (data && Array.isArray(data.features)) {
-    return data.features.map((feature: any) => {
+    return data.features.map((feature: RawTfr) => {
       const props = feature?.properties ?? {};
       const coordinates = parseCoordinates(feature);
       const effective = extractEffectiveWindow(props.TITLE);
@@ -106,7 +115,7 @@ function parseFaaTfrs(data: any): TfrData[] {
     return [];
   }
 
-  return data.items.map((item: any) => ({
+  return data.items.map((item: RawTfr) => ({
     id: item.notamNumber || item.id || Math.random().toString(36).substr(2, 9),
     name: item.description || 'TFR',
     type: item.type || 'GENERAL',
@@ -123,7 +132,7 @@ function parseFaaTfrs(data: any): TfrData[] {
   }));
 }
 
-function parseCoordinates(item: any): TfrData['coordinates'] {
+function parseCoordinates(item: RawTfr): TfrData['coordinates'] {
   if (item?.geometry?.type === 'Polygon' && Array.isArray(item.geometry.coordinates?.[0])) {
     return {
       type: 'polygon',

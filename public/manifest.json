@@ -1,8 +1,10 @@
 {
   "name": "Aviation Weather",
   "short_name": "AvWeather",
-  "description": "Real-time METAR & Flight Categories",
-  "start_url": "/",
+  "description": "Aviation weather and preflight tools — supplemental-use preview",
+  "id": "/",
+  "start_url": "/map",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",

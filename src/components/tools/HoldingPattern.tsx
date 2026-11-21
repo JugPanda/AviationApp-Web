@@ -115,7 +115,7 @@ export default function HoldingPattern() {
   }, [inboundCourse, aircraftHeading, holdingDirection, tas, windDirection, windSpeed]);
 
   // Holding pattern visualization
-  const HoldingDiagram = () => {
+  const renderHoldingDiagram = () => {
     const inbound = parseFloat(inboundCourse) || 0;
     const isRight = holdingDirection === 'right';
     
@@ -249,7 +249,7 @@ export default function HoldingPattern() {
   };
 
   // Entry visualization
-  const EntryDiagram = () => {
+  const renderEntryDiagram = () => {
     const { entryType } = result;
     const inbound = parseFloat(inboundCourse) || 0;
     const heading = parseFloat(aircraftHeading) || 0;
@@ -400,7 +400,7 @@ export default function HoldingPattern() {
               </p>
               <p className="text-sm text-slate-300 mt-1">{result.entryDescription}</p>
             </div>
-            <EntryDiagram />
+            {renderEntryDiagram()}
           </div>
         </div>
       )}
@@ -408,7 +408,7 @@ export default function HoldingPattern() {
       {/* Holding Pattern Diagram */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">Holding Pattern</h4>
-        <HoldingDiagram />
+        {renderHoldingDiagram()}
         <div className="grid grid-cols-2 gap-4 mt-4 text-center text-sm">
           <div>
             <p className="text-slate-400">Outbound Heading</p>

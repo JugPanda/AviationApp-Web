@@ -35,6 +35,14 @@ export interface PirepData {
   rawText: string;
 }
 
+interface RawPirep {
+  pirepId: string; receiptTime: string; obsTime: string; icaoId?: string;
+  lat: number; lon: number; altFt: number; fltlvl: number; acType?: string; reportType: string;
+  turbInt?: NonNullable<PirepData['turbulence']>['intensity']; turbType?: string; turbFreq?: string; turbAlt?: number;
+  icgInt?: NonNullable<PirepData['icing']>['intensity']; icgType?: string; icgAlt?: number;
+  skyCover?: string; visib?: number; temp?: number; wdir: number; wspd: number; rawOb?: string; rawText?: string;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const bounds = searchParams.get('bounds');
@@ -65,7 +73,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
     }
 
-    const pireps: PirepData[] = data.map((p: any, i: number) => ({
+    const pireps: PirepData[] = data.map((p: RawPirep, i: number) => ({
       id: p.pirepId || `pirep-${i}`,
       receiptTime: p.receiptTime || '',
       obsTime: p.obsTime || p.receiptTime || '',

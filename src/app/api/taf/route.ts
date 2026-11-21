@@ -32,6 +32,8 @@ export interface TafForecast {
   raw: string;
 }
 
+interface RawTaf { icaoId: string; rawTAF: string; rawOb: string; issueTime: string; validTimeFrom: string; validTimeTo: string; }
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const ids = searchParams.get('ids');
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse and structure the TAF data
-    const tafs: TafData[] = data.map((taf: any) => ({
+    const tafs: TafData[] = data.map((taf: RawTaf) => ({
       icaoId: taf.icaoId,
       rawTaf: taf.rawTAF || taf.rawOb,
       issueTime: taf.issueTime,

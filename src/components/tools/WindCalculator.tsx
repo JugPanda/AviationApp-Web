@@ -54,7 +54,7 @@ export default function WindCalculator() {
   }, [trueCourse, trueAirspeed, windDirection, windSpeed]);
 
   // Wind triangle SVG visualization
-  const WindTriangle = () => {
+  const renderWindTriangle = () => {
     if (!result) return null;
 
     const centerX = 150;
@@ -222,7 +222,7 @@ export default function WindCalculator() {
       {/* Wind Triangle Visualization */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">Wind Triangle</h4>
-        <WindTriangle />
+        {renderWindTriangle()}
       </div>
 
       {/* Results */}

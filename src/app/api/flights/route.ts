@@ -138,6 +138,9 @@ async function fetchFlightsByQuery(query: string): Promise<FlightData[]> {
 }
 
 export async function GET(request: Request) {
+  if (process.env.ENABLE_LICENSED_TRAFFIC !== "true") {
+    return NextResponse.json({ status: "unavailable", error: "Flight traffic is not enabled while provider permissions are being confirmed." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
   const { searchParams } = new URL(request.url);
   const query = searchParams.get('query') ?? searchParams.get('callsign');
   const bounds = searchParams.get('bounds'); // "lat1,lat2,lon1,lon2"
@@ -173,7 +176,7 @@ export async function GET(request: Request) {
     }
     
     // Transform OpenSky response to our format
-    let flights: FlightData[] = data.states.map((state: (string | number | boolean | null)[]) => ({
+    const flights: FlightData[] = data.states.map((state: (string | number | boolean | null)[]) => ({
       icao24: state[0] as string,
       callsign: (state[1] as string)?.trim() || 'N/A',
       originCountry: state[2] as string,

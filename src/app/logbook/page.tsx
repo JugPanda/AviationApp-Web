@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import AppShell, { useBrowserReady } from '@/components/AppShell';
 
 interface FlightEntry {
   id: string;
@@ -73,6 +73,7 @@ function generateId(): string {
 }
 
 export default function LogbookPage() {
+  const browserReady = useBrowserReady();
   const [entries, setEntries] = useState<FlightEntry[]>(() => getEntries());
   const [view, setView] = useState<'list' | 'add' | 'currency' | 'totals'>('list');
   const [editingEntry, setEditingEntry] = useState<FlightEntry | null>(null);
@@ -125,8 +126,6 @@ export default function LogbookPage() {
     const recent = entries.filter(e => new Date(e.date) >= ninetyDaysAgo);
     const recentDayLandings = recent.reduce((sum, e) => sum + e.dayLandings, 0);
     const recentNightLandings = recent.reduce((sum, e) => sum + e.nightLandings, 0);
-    const recentApproaches = recent.reduce((sum, e) => sum + e.approaches, 0);
-    const recentHolds = recent.reduce((sum, e) => sum + e.holds, 0);
     
     // Find most recent night landing for currency expiration
     const nightEntries = entries.filter(e => e.nightLandings > 0).sort((a, b) => 
@@ -145,7 +144,7 @@ export default function LogbookPage() {
     // Day currency (3 landings in 90 days)
     items.push({
       name: 'Day Passenger',
-      description: '91.57(a)(1)',
+      description: '61.57(a)(1)',
       requirement: '3 landings in 90 days',
       status: recentDayLandings >= 3 ? 'current' : recentDayLandings >= 1 ? 'warning' : 'expired',
       lastCompleted: recent.find(e => e.dayLandings > 0)?.date
@@ -154,7 +153,7 @@ export default function LogbookPage() {
     // Night currency (3 landings to full stop in 90 days)
     items.push({
       name: 'Night Passenger',
-      description: '91.57(b)',
+      description: '61.57(b)',
       requirement: '3 night landings in 90 days',
       status: recentNightLandings >= 3 ? 'current' : recentNightLandings >= 1 ? 'warning' : 'expired',
       lastCompleted: lastNightLanding?.date
@@ -251,38 +250,25 @@ export default function LogbookPage() {
     reader.readAsText(file);
   };
 
-  return (
-    <main className="min-h-screen bg-slate-950 text-white pb-20">
-      {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-700 px-4 py-3">
-        <div className="flex items-center gap-4">
-          <Link 
-            href="/"
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            <span className="hidden sm:inline">Map</span>
-          </Link>
-          
-          <div className="flex-1">
-            <h1 className="text-lg font-bold">✈️ Flight Logbook</h1>
-            <p className="text-xs text-slate-400 hidden sm:block">{totals.flights} flights • {totals.totalTime.toFixed(1)} total hours</p>
-          </div>
+  if (!browserReady) {
+    return <AppShell><main id="workspace-content" tabIndex={-1} className="av-page-heading"><h1>Flight logbook</h1><p role="status">Opening your local logbook…</p></main></AppShell>;
+  }
 
-          <button
-            onClick={() => { setEditingEntry(null); setView('add'); }}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 text-sm font-medium"
-          >
-            <span>+</span>
-            <span className="hidden sm:inline">Add Flight</span>
-          </button>
+  return (
+    <AppShell>
+    <main id="workspace-content" tabIndex={-1} className="min-h-screen bg-slate-950 text-white pb-20">
+      <header className="av-page-heading">
+        <div>
+          <p className="av-eyebrow">04 / Your flying record</p>
+          <h1>Flight logbook</h1>
+          <p className="av-page-description">{totals.flights} {totals.flights === 1 ? 'flight' : 'flights'} · {totals.totalTime.toFixed(1)} total hours</p>
+          <p className="av-local-note">Stored in this browser only. Export a backup before clearing browser data.</p>
         </div>
+        <button onClick={() => { setEditingEntry(null); setView('add'); }} className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium">+ Add Flight</button>
       </header>
 
       {/* Tab Navigation */}
-      <div className="bg-slate-900/50 border-b border-slate-700">
+      <div className="av-subnav">
         <div className="flex overflow-x-auto">
           {[
             { key: 'list', label: '📋 Entries' },
@@ -291,6 +277,7 @@ export default function LogbookPage() {
           ].map(({ key, label }) => (
             <button
               key={key}
+              aria-pressed={view === key}
               onClick={() => setView(key as typeof view)}
               className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 view === key 
@@ -313,12 +300,12 @@ export default function LogbookPage() {
               <div className="text-center py-12 text-slate-400">
                 <p className="text-4xl mb-4">✈️</p>
                 <p className="text-lg">No flights logged yet</p>
-                <p className="text-sm mt-2">Click "Add Flight" to log your first flight</p>
+                <p className="text-sm mt-2">Use Add Flight to record your first entry.</p>
               </div>
             ) : (
               <>
                 {/* Sort controls */}
-                <div className="flex items-center justify-between">
+                <div className="av-logbook-sort flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-slate-400">Sort by:</span>
                     <button
@@ -339,9 +326,9 @@ export default function LogbookPage() {
                     <button onClick={handleExport} className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded">
                       Export
                     </button>
-                    <label className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded cursor-pointer">
+                    <label className="av-import px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded cursor-pointer">
                       Import
-                      <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                      <input type="file" accept=".json" onChange={handleImport} aria-label="Import logbook JSON file" />
                     </label>
                   </div>
                 </div>
@@ -352,7 +339,7 @@ export default function LogbookPage() {
                     <div key={entry.id} className="bg-slate-800/50 rounded-lg p-4">
                       <div className="flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-3">
+                          <div className="av-logbook-entry-heading flex items-center gap-3">
                             <span className="font-bold text-lg">{entry.from} → {entry.to}</span>
                             <span className="text-slate-400 text-sm">{entry.date}</span>
                           </div>
@@ -453,7 +440,7 @@ export default function LogbookPage() {
         {view === 'currency' && (
           <div className="space-y-4">
             <div className="text-sm text-slate-400 mb-4">
-              Currency status based on logged flights. Always verify against official records.
+              These simplified estimates use your logged entries, not a complete regulatory assessment. They do not establish legal currency or fitness to fly. Verify all requirements and official records independently.
             </div>
             
             {currency.map((item, i) => (
@@ -462,7 +449,7 @@ export default function LogbookPage() {
                 item.status === 'warning' ? 'border-amber-500' :
                 'border-red-500'
               }`}>
-                <div className="flex items-start justify-between">
+                <div className="flex flex-wrap gap-3 items-start justify-between">
                   <div>
                     <h4 className="font-bold">{item.name}</h4>
                     <p className="text-sm text-slate-400">{item.description}</p>
@@ -473,9 +460,9 @@ export default function LogbookPage() {
                     item.status === 'warning' ? 'bg-amber-900/50 text-amber-300' :
                     'bg-red-900/50 text-red-300'
                   }`}>
-                    {item.status === 'current' ? '✓ Current' :
-                     item.status === 'warning' ? '⚠ Expiring' :
-                     '✗ Expired'}
+                    {item.status === 'current' ? 'Count met' :
+                     item.status === 'warning' ? 'Partial count' :
+                     'Count not met'}
                   </span>
                 </div>
                 {item.lastCompleted && (
@@ -511,6 +498,7 @@ export default function LogbookPage() {
         )}
       </div>
     </main>
+    </AppShell>
   );
 }
 
@@ -585,6 +573,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">Date</label>
             <input
+                aria-label="Date"
               type="date"
               value={form.date}
               onChange={e => setForm({...form, date: e.target.value})}
@@ -595,6 +584,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">Aircraft</label>
             <input
+                aria-label="Aircraft"
               type="text"
               value={form.aircraft}
               onChange={e => setForm({...form, aircraft: e.target.value.toUpperCase()})}
@@ -606,6 +596,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">Aircraft Type</label>
             <input
+                aria-label="Aircraft Type"
               type="text"
               value={form.aircraftType}
               onChange={e => setForm({...form, aircraftType: e.target.value.toUpperCase()})}
@@ -617,6 +608,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">Total Time</label>
             <input
+                aria-label="Total Time"
               type="number"
               step="0.1"
               value={form.totalTime || ''}
@@ -631,6 +623,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">From</label>
             <input
+                aria-label="From"
               type="text"
               value={form.from}
               onChange={e => setForm({...form, from: e.target.value.toUpperCase()})}
@@ -642,6 +635,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">To</label>
             <input
+                aria-label="To"
               type="text"
               value={form.to}
               onChange={e => setForm({...form, to: e.target.value.toUpperCase()})}
@@ -653,6 +647,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-sm text-slate-400 mb-1">Via (optional)</label>
             <input
+                aria-label="Via (optional)"
               type="text"
               value={form.route}
               onChange={e => setForm({...form, route: e.target.value.toUpperCase()})}
@@ -681,9 +676,10 @@ function FlightEntryForm({
             <div key={key}>
               <label className="block text-xs text-slate-400 mb-1">{label}</label>
               <input
+                aria-label={label}
                 type="number"
                 step="0.1"
-                value={(form as any)[key] || ''}
+                value={form[key as keyof typeof form] || ''}
                 onChange={e => setForm({...form, [key]: parseFloat(e.target.value) || 0})}
                 className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
                 placeholder="0.0"
@@ -700,6 +696,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-xs text-slate-400 mb-1">Day Landings</label>
             <input
+                aria-label="Day Landings"
               type="number"
               value={form.dayLandings || ''}
               onChange={e => setForm({...form, dayLandings: parseInt(e.target.value) || 0})}
@@ -710,6 +707,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-xs text-slate-400 mb-1">Night Landings</label>
             <input
+                aria-label="Night Landings"
               type="number"
               value={form.nightLandings || ''}
               onChange={e => setForm({...form, nightLandings: parseInt(e.target.value) || 0})}
@@ -720,6 +718,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-xs text-slate-400 mb-1">Approaches</label>
             <input
+                aria-label="Approaches"
               type="number"
               value={form.approaches || ''}
               onChange={e => setForm({...form, approaches: parseInt(e.target.value) || 0})}
@@ -730,6 +729,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-xs text-slate-400 mb-1">Holds</label>
             <input
+              aria-label="Holds"
               type="number"
               value={form.holds || ''}
               onChange={e => setForm({...form, holds: parseInt(e.target.value) || 0})}
@@ -742,6 +742,7 @@ function FlightEntryForm({
           <div>
             <label className="block text-xs text-slate-400 mb-1">Approach Types</label>
             <input
+              aria-label="Approach Types"
               type="text"
               value={form.approachTypes}
               onChange={e => setForm({...form, approachTypes: e.target.value})}
@@ -756,6 +757,7 @@ function FlightEntryForm({
       <div className="bg-slate-800/50 rounded-lg p-4">
         <label className="block text-sm text-slate-400 mb-1">Remarks</label>
         <textarea
+              aria-label="Remarks"
           value={form.remarks}
           onChange={e => setForm({...form, remarks: e.target.value})}
           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white h-20 resize-none"

@@ -129,7 +129,7 @@ export default function FuelCalculator() {
               mode === 'required' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
             }`}
           >
-            Fuel Req'd
+            Fuel Req&apos;d
           </button>
           <button
             onClick={() => setMode('range')}

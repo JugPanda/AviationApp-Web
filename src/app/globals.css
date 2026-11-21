@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-heading: var(--font-manrope);
+  --font-dm: var(--font-dm-sans);
   --vfr: #22c55e;
   --mvfr: #3b82f6;
   --ifr: #ef4444;
@@ -8,11 +10,11 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-dm), system-ui, -apple-system, sans-serif;
   background: #0f172a;
   color: #f1f5f9;
 }

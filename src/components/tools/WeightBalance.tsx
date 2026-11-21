@@ -15,7 +15,7 @@ import {
   importProfiles,
 } from '@/lib/profiles';
 
-// Aircraft weight & balance data
+// Illustrative, unverified templates; not individual-aircraft operational records.
 interface Station {
   name: string;
   arm: number; // inches from datum
@@ -530,6 +530,18 @@ export default function WeightBalance() {
 
   return (
     <div className="space-y-6">
+      <aside aria-label="Weight and balance data limitations" className="rounded-lg border border-amber-700 bg-amber-950/40 p-4 text-sm text-amber-100">
+        <h3 className="font-semibold">Illustrative templates — unverified</h3>
+        <p className="mt-2">
+          Built-in aircraft data is for illustration, not an individual-aircraft weight and balance record.
+          C182T is not T182T; C172S is not 172N. Do not substitute these templates for another model or aircraft.
+        </p>
+        <p className="mt-2">
+          Verify all values against the specific aircraft’s current approved weight and balance record and POH/AFM,
+          including equipment, station limits and loading envelope. Custom entries and saved profiles are user-supplied, not verified by this app.
+          Results are not a determination that an aircraft is safe to fly.
+        </p>
+      </aside>
       {/* Profile Quick Actions */}
       <div className="flex flex-wrap gap-2">
         <select
@@ -579,9 +591,9 @@ export default function WeightBalance() {
             }}
             className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <optgroup label="Standard Aircraft">
+            <optgroup label="Illustrative templates (unverified)">
               {Object.entries(AIRCRAFT_DATABASE).map(([id, data]) => (
-                <option key={id} value={id}>{data.name}</option>
+                <option key={id} value={id}>{data.name} — illustrative</option>
               ))}
             </optgroup>
             {customAircraftList.length > 0 && (
@@ -651,7 +663,7 @@ export default function WeightBalance() {
         <div className="space-y-4">
           {/* CG Envelope Chart */}
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">CG Envelope</h4>
+            <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">CG Envelope — selected data, unverified</h4>
             <EnvelopeChart envelope={aircraft.envelope} calculations={calculations} />
           </div>
 
@@ -726,10 +738,11 @@ export default function WeightBalance() {
             </div>
             <div className="mt-3 pt-3 border-t border-slate-700 text-center">
               {calculations.isValid ? (
-                <span className="text-green-400 font-medium">✓ Within Limits</span>
+                <span className="text-green-400 font-medium">Within selected weight/CG limits only — unverified</span>
               ) : (
-                <span className="text-red-400 font-medium">✗ Out of Limits</span>
+                <span className="text-red-400 font-medium">Outside selected weight/CG limits</span>
               )}
+              <p className="mt-2 text-xs text-slate-300">This check does not establish operational loading compliance or flight safety.</p>
             </div>
           </div>
         </div>

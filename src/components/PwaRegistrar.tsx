@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 export default function PwaRegistrar() {
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    if (process.env.NODE_ENV !== 'production' || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
       return;
     }
 

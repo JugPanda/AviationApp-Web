@@ -12,6 +12,7 @@ import {
   cn
 } from '@/lib/utils';
 import { formatCacheAge, getCacheFreshness } from '@/lib/cache-freshness';
+import { useHydrated } from '@/lib/use-hydrated';
 import WindDisplay from '@/components/weather/WindDisplay';
 import CloudVisualization from '@/components/weather/CloudVisualization';
 
@@ -125,37 +126,39 @@ function saveCachedBriefing(icaoId: string, next: Partial<CachedBriefingPayload>
   window.localStorage.setItem(getBriefingCacheKey(icaoId), JSON.stringify(payload));
 }
 
+type AirportTab = 'weather' | 'taf' | 'notams' | 'info' | 'runways' | 'frequencies';
+
 export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
-  const [activeTab, setActiveTab] = useState<'weather' | 'taf' | 'notams' | 'info' | 'runways' | 'frequencies'>('weather');
-  const [details, setDetails] = useState<AirportDetails | null>(null);
-  const [tafData, setTafData] = useState<TafData | null>(null);
-  const [notams, setNotams] = useState<NotamData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<AirportTab>('weather');
+  const hydrated = useHydrated();
+  if (!airport) return null;
+  if (!hydrated) return <p role="status">Loading saved briefing…</p>;
+
+  // Airport-specific state must not leak across selections. Keep the tab in
+  // the parent, but initialize each airport from its own cache before fetching.
+  return <AirportBriefing key={airport.icaoId} airport={airport} onClose={onClose} activeTab={activeTab} setActiveTab={setActiveTab} />;
+}
+
+function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
+  airport: MetarData;
+  onClose: () => void;
+  activeTab: AirportTab;
+  setActiveTab: (tab: AirportTab) => void;
+}) {
+  const [cached] = useState(() => loadCachedBriefing(airport.icaoId));
+  const [details, setDetails] = useState<AirportDetails | null>(cached?.details ?? null);
+  const [tafData, setTafData] = useState<TafData | null>(cached?.taf ?? null);
+  const [notams, setNotams] = useState<NotamData[]>(cached?.notams ?? []);
+  const [loading, setLoading] = useState(Boolean(airport.icaoId));
   const [tafLoading, setTafLoading] = useState(false);
   const [notamLoading, setNotamLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notamNotice, setNotamNotice] = useState<string | null>(null);
-  const [briefingCachedAt, setBriefingCachedAt] = useState<number | null>(null);
+  const [notamNotice, setNotamNotice] = useState<string | null>(cached?.notamNotice ?? null);
+  const [briefingCachedAt, setBriefingCachedAt] = useState<number | null>(cached?.cachedAt ?? null);
   
   useEffect(() => {
     if (!airport?.icaoId) return;
 
-    const cached = loadCachedBriefing(airport.icaoId);
-    setBriefingCachedAt(cached?.cachedAt ?? null);
-    if (cached?.details) {
-      setDetails(cached.details);
-    }
-    if (cached?.taf) {
-      setTafData(cached.taf);
-    }
-    if (cached?.notams) {
-      setNotams(cached.notams);
-      setNotamNotice(cached.notamNotice ?? null);
-    }
-    
-    setLoading(true);
-    setError(null);
-    
     fetch(`/api/airport/${airport.icaoId}`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to load airport details');
@@ -174,7 +177,7 @@ export default function AirportInfo({ airport, onClose }: AirportInfoProps) {
         }
         setLoading(false);
       });
-  }, [airport?.icaoId]);
+  }, [airport.icaoId, cached]);
 
   // Fetch TAF when TAF tab is selected
   useEffect(() => {
