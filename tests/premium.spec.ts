@@ -50,7 +50,9 @@ for (const width of [360, 768, 1440]) {
         expect(axe.violations).toEqual([]);
       }
       if (route === "/") {
-        const image = page.locator(".product-frame img");
+        const image = page.locator(width < 761 ? ".phone-screen img" : ".product-frame img");
+        await expect(page.locator(".phone-mockup")).toBeVisible();
+        await expect(page.locator(".desktop-device")).toBeVisible({ visible: width > 760 });
         await image.scrollIntoViewIfNeeded();
         await image.evaluate((i: HTMLImageElement) => i.decode());
         if (width === 360) {

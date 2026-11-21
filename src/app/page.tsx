@@ -100,70 +100,52 @@ export default function LandingPage() {
                 <span>Phone · Tablet · Desktop</span>
               </div>
             </div>
-            <div className="hero-instrument" aria-hidden="true">
-              <svg viewBox="0 0 400 400" fill="none">
-                <circle cx="200" cy="200" r="177" />
-                <circle cx="200" cy="200" r="135" />
-                <circle cx="200" cy="200" r="88" />
-                <path
-                  d="M200 0v400M0 200h400M59 59l282 282M59 341L341 59"
-                  className="instrument-guides"
-                />
-                {Array.from({ length: 36 }, (_, i) => (
-                  <path
-                    key={i}
-                    d={i % 3 ? "M200 23v7" : "M200 23v14"}
-                    transform={`rotate(${i * 10} 200 200)`}
-                  />
-                ))}
-                <path
-                  d="M96 275C126 267 129 174 200 200S267 123 306 109"
-                  className="instrument-route"
-                />
-                <circle cx="96" cy="275" r="6" className="instrument-point" />
-                <circle cx="306" cy="109" r="6" className="instrument-point" />
-                <path
-                  d="m201 170 7 32 22 10v5l-23-5v13l6 5v4l-13-4-13 4v-4l6-5v-13l-23 5v-5l22-10 7-32Z"
-                  className="instrument-aircraft"
-                />
-              </svg>
-              <span className="instrument-n">N</span>
-              <span className="instrument-caption">
-                A LITTLE MORE PERSPECTIVE.
-              </span>
-            </div>
+            <figure className="hero-device" aria-labelledby="phone-caption">
+              <div className="device-orbit" aria-hidden="true"><span>N</span></div>
+              <Link href="/map" className="phone-mockup" aria-label="Open AV Weather shown in the phone preview">
+                <span className="phone-button phone-button-volume" aria-hidden="true" />
+                <span className="phone-button phone-button-power" aria-hidden="true" />
+                <span className="phone-bezel">
+                  <span className="phone-camera" aria-hidden="true" />
+                  <span className="phone-screen">
+                    <Image
+                      src="/images/weather-workspace-mobile.webp"
+                      alt="Actual AV Weather airport briefing displayed in a phone mockup. Captured weather is not current flight information."
+                      width={390}
+                      height={844}
+                      priority
+                      unoptimized
+                    />
+                  </span>
+                  <span className="phone-bottom" aria-hidden="true"><i /></span>
+                </span>
+              </Link>
+              <figcaption id="phone-caption">
+                <span>THE WORKSPACE. IN YOUR POCKET.</span>
+                <span>Real browser preview · Illustrative device</span>
+              </figcaption>
+            </figure>
           </div>
           <figure className="product-frame">
-            <div className="product-frame-bar">
-              <span>
-                <i />
-                <i />
-                <i />
-              </span>
-              <span>AV WEATHER / WEATHER WORKSPACE</span>
-              <span>PRODUCT PREVIEW</span>
+            <div className="desktop-device">
+              <div className="desktop-device-bezel">
+                <div className="product-frame-bar">
+                  <span><i /><i /><i /></span>
+                  <span>AV WEATHER / WEATHER WORKSPACE</span>
+                  <span>BROWSER PREVIEW</span>
+                </div>
+                <Link href="/map" aria-label="Open the weather workspace shown in this screenshot">
+                  <Image
+                    src="/images/weather-workspace.webp"
+                    alt="Captured AV Weather interface with airport weather and an FAA map. This screenshot is not current flight information."
+                    width={1440}
+                    height={900}
+                    sizes="(max-width: 760px) 100vw, 85vw"
+                  />
+                </Link>
+              </div>
+              <div className="desktop-device-base" aria-hidden="true"><span /></div>
             </div>
-            <Link
-              href="/map"
-              aria-label="Open the weather workspace shown in this screenshot"
-            >
-              <picture>
-                <source
-                  media="(max-width: 760px)"
-                  srcSet="/images/weather-workspace-mobile.webp"
-                  width={390}
-                  height={844}
-                />
-                <Image
-                  src="/images/weather-workspace.webp"
-                  alt="Captured AV Weather interface with airport weather and an FAA map. This screenshot is not current flight information."
-                  width={1440}
-                  height={900}
-                  priority
-                  sizes="(max-width: 760px) 100vw, 90vw"
-                />
-              </picture>
-            </Link>
             <figcaption>
               Actual preview interface. Captured weather is not current flight
               information. Map imagery: FAA.{" "}

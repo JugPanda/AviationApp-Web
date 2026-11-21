@@ -133,7 +133,7 @@
   grid-template-columns: 1.6fr 1fr;
   gap: 30px;
   align-items: center;
-  padding: 56px 0 68px;
+  padding: 40px 0 48px;
   position: relative;
 }
 .hero-copy {
@@ -207,63 +207,116 @@
   border-left: 1px solid #455861;
   padding-left: 18px;
 }
-.hero-instrument {
+.hero-device {
   position: relative;
-  max-width: 410px;
+  isolation: isolate;
   width: 100%;
-  justify-self: end;
-  aspect-ratio: 1;
-  opacity: 0.9;
-}
-.hero-instrument svg {
-  width: 100%;
-  height: 100%;
-  stroke: #53707f;
-  stroke-width: 0.7;
-}
-.hero-instrument .instrument-guides {
-  stroke: #304957;
-  stroke-dasharray: 3 7;
-}
-.hero-instrument .instrument-route {
-  stroke: var(--accent);
-  stroke-width: 1.7;
-  stroke-dasharray: 5 5;
-}
-.hero-instrument .instrument-point {
-  stroke: var(--accent);
-  stroke-width: 2;
-  fill: var(--ink);
-}
-.hero-instrument .instrument-aircraft {
-  fill: #d5e3e6;
-  stroke: none;
-}
-.instrument-n {
-  position: absolute;
-  top: 7%;
-  left: 49%;
-  font-size: 10px;
-  color: #a4c9d5;
-}
-.instrument-caption {
-  position: absolute;
-  bottom: -8px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: #94aab5;
-}
-.product-frame {
   margin: 0;
-  border: 1px solid #435762;
-  background: #080f18;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 24px 90px #0005;
+  padding: 14px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.device-orbit {
+  position: absolute;
+  inset: 10% -6% 18%;
+  z-index: -1;
+  border: 1px solid #a4c9d51c;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #a4c9d521, transparent 68%);
+  transform: rotate(-20deg);
+}
+.device-orbit::before,
+.device-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border: 1px dashed #a4c9d523;
+  border-radius: 50%;
+}
+.device-orbit::after { inset: -10%; border-style: solid; opacity: .45; }
+.device-orbit > span {
+  position: absolute;
+  top: -19px;
+  left: 50%;
+  color: #a4c9d5;
+  font: 10px monospace;
+}
+.phone-mockup {
   position: relative;
+  width: clamp(230px, 19vw, 276px);
+  padding: 3px;
+  border-radius: 40px;
+  background: linear-gradient(125deg, #c6d3d8 0%, #51616c 12%, #17222b 35%, #81929c 65%, #d3dce0 84%, #45535e);
+  box-shadow: 20px 35px 50px #0007, -1px -1px 0 #dcebf559, 0 0 0 1px #070c12;
+  transform: rotate(7deg);
+  display: block;
+}
+.phone-bezel {
+  display: block;
+  padding: 24px 7px 0;
+  background: #050a0e;
+  border: 1px solid #020508;
+  border-radius: 37px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px #72838d4d;
+}
+.phone-camera {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  top: 12px;
+  left: calc(50% - 3px);
+  background: radial-gradient(circle at 40% 35%, #1e3a50, #060b10 65%);
+  box-shadow: 0 0 0 2px #1a242c;
+}
+.phone-screen { display: block; overflow: hidden; border-radius: 10px; background: #0b1721; }
+.phone-screen img { display: block; width: 100%; height: auto; aspect-ratio: 390 / 844; }
+.phone-bottom { height: 22px; display: flex; align-items: center; justify-content: center; }
+.phone-bottom i { display: block; height: 3px; width: 30%; border-radius: 3px; background: #81939e; }
+.phone-button { position: absolute; width: 3px; border-radius: 2px; background: linear-gradient(#899ba5, #1b2a35, #71848f); }
+.phone-button-volume { height: 58px; top: 105px; left: -3px; }
+.phone-button-power { height: 34px; top: 134px; right: -3px; }
+.hero-device figcaption {
+  margin-top: 36px;
+  text-align: center;
+  line-height: 1.8;
+  color: #b3c6d0;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+.hero-device figcaption span { display: block; }
+.hero-device figcaption span + span { font-size: 10px; color: #9cb0bb; letter-spacing: 0; }
+.product-frame { margin: 0; position: relative; }
+.desktop-device { padding: 18px 3% 0; }
+.desktop-device-bezel {
+  padding: 11px 11px 0;
+  border: 1px solid #83929b;
+  border-bottom: 0;
+  background: linear-gradient(130deg, #40505a, #080e15 12%, #101a22 85%, #4c5d68);
+  border-radius: 24px 24px 0 0;
+  overflow: hidden;
+  box-shadow: 0 22px 70px #0005, inset 0 0 0 1px #d9e4e921;
+}
+.desktop-device-bezel > a { display: block; overflow: hidden; }
+.desktop-device-base {
+  position: relative;
+  margin: 0 -3.2%;
+  height: 24px;
+  border-radius: 2px 2px 50% 50% / 2px 2px 90% 90%;
+  background: linear-gradient(#afbbc3, #697b88 30%, #364650 70%, #1b2933);
+  box-shadow: 0 24px 24px #0006;
+  border-top: 1px solid #d3dce0;
+}
+.desktop-device-base span {
+  display: block;
+  width: 15%;
+  height: 7px;
+  margin: auto;
+  background: #455560;
+  border-radius: 0 0 8px 8px;
+  box-shadow: inset 0 -1px 1px #cad7de7a;
 }
 .product-frame-bar {
   display: flex;
@@ -300,6 +353,7 @@
   font-size: 10px;
   line-height: 1.7;
   border-top: 1px solid #31434e;
+  margin-top: 28px;
 }
 .product-frame figcaption a {
   color: #dce6e9;
@@ -746,9 +800,11 @@
     display: block;
     padding: 40px 0;
   }
-  .hero-instrument {
-    display: none;
-  }
+  .hero-device { margin: 36px 0 0; padding: 15px 0 0; }
+  .phone-mockup { width: min(76%, 280px); transform: rotate(-5deg); }
+  .device-orbit { inset: 10% -6% 20%; }
+  .hero-device figcaption { margin-top: 30px; }
+  .desktop-device { display: none; }
   .av-landing h1 {
     font-size: clamp(42px, 8.7vw, 64px);
     letter-spacing: -2.6px;

@@ -12,6 +12,8 @@ Server-rendered landing, application entry at `/map`, shared Map/Plan/Tools/Logb
 
 `public/images/weather-workspace.webp` and `weather-workspace-mobile.webp` are real local production-mode captures of this application after a KLOU lookup. Data came from real providers; no responses were fabricated or intercepted for these assets. They are static historical captures, explicitly captioned as not current flight information. FAA chart imagery retains visible/page attribution. The mobile capture uses a 390×844 CSS-pixel viewport at 3× device scale (1170×2532 source pixels). Source PNG and capture evidence are outside the repository under the active profile's `reports/avweather/`. Do not describe these images as live weather.
 
+Device presentation: original, brand-neutral CSS phone and laptop mockups frame those real screenshots. Metallic edges, camera/side-button geometry, shadows and background rings are decorative illustrations, not photographs or claims of native-app distribution. No third-party mockup pack, hardware trademark, stock photography, paid asset or generated screen was used. The phone composition remains visible on mobile; the larger laptop composition is shown on tablet/desktop. Both link to the actual browser workspace.
+
 Typography: self-hosted Manrope and DM Sans via Fontsource, with OFL notices retained in `public/licenses/`. Existing app icons were preserved. No competitor logos, code, charts or proprietary aircraft profiles were copied. REA was not installed: the task did not require reverse engineering.
 
 ## Preservation and security
