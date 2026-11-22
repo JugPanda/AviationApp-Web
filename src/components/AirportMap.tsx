@@ -268,37 +268,6 @@ const WEATHER_OVERLAYS = {
   },
 };
 
-// Wind barb component for airport markers
-const WindBarb = memo(function WindBarb({ 
-  wdir, 
-  wspd, 
-  x = 0, 
-  y = 0 
-}: { 
-  wdir: number | null | undefined; 
-  wspd: number | null | undefined;
-  x?: number;
-  y?: number;
-}) {
-  if (wdir == null || wspd == null || wspd === 0) return null;
-  
-  // Create wind barb SVG path
-  const barbLength = 15;
-  const radians = ((wdir - 90) * Math.PI) / 180; // Convert to radians, adjust for SVG coordinates
-  
-  return (
-    <line
-      x1={x}
-      y1={y}
-      x2={x + Math.cos(radians) * barbLength}
-      y2={y + Math.sin(radians) * barbLength}
-      stroke="white"
-      strokeWidth={2}
-      strokeLinecap="round"
-    />
-  );
-});
-
 // Map layer definitions
 const MAP_LAYERS = {
   dark: {
@@ -370,16 +339,13 @@ export default function AirportMap({
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number>(0);
   const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
 
   const handleLocate = useCallback(() => {
     if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by your browser');
       return;
     }
 
     setIsLocating(true);
-    setLocationError(null);
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -387,21 +353,8 @@ export default function AirportMap({
         setLocationAccuracy(position.coords.accuracy);
         setIsLocating(false);
       },
-      (error) => {
+      () => {
         setIsLocating(false);
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            setLocationError('Location permission denied');
-            break;
-          case error.POSITION_UNAVAILABLE:
-            setLocationError('Location unavailable');
-            break;
-          case error.TIMEOUT:
-            setLocationError('Location request timed out');
-            break;
-          default:
-            setLocationError('Unable to get location');
-        }
       },
       {
         enableHighAccuracy: true,
@@ -437,6 +390,7 @@ export default function AirportMap({
   );
 
   return (
+    <>
     <MapContainer
       center={center}
       zoom={zoom}
@@ -604,5 +558,7 @@ export default function AirportMap({
       <PirepLayer visible={showHazards} />
       <SigmetLayer visible={showHazards} />
     </MapContainer>
+    <div data-map-layer-notices aria-label="Map coverage notices" className="absolute bottom-4 right-3 z-[950] flex max-h-[38%] flex-col gap-2 overflow-y-auto" style={{ width: 'min(320px, calc(100% - 5rem))' }} />
+    </>
   );
 }

@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import AppShell from '@/components/AppShell';
 import WeightBalance from '@/components/tools/WeightBalance';
-import DensityAltitude from '@/components/tools/DensityAltitude';
-import CrosswindCalculator from '@/components/tools/CrosswindCalculator';
-import TimeSpeedDistance from '@/components/tools/TimeSpeedDistance';
-import FuelCalculator from '@/components/tools/FuelCalculator';
-import WindCalculator from '@/components/tools/WindCalculator';
-import AltitudeCalculator from '@/components/tools/AltitudeCalculator';
-import SunCalculator from '@/components/tools/SunCalculator';
-import Timer from '@/components/tools/Timer';
-import HoldingPattern from '@/components/tools/HoldingPattern';
 import './tools.css';
+
+// Keep the first calculator server-rendered; load other tools only on selection.
+const DensityAltitude = lazy(() => import('@/components/tools/DensityAltitude'));
+const CrosswindCalculator = lazy(() => import('@/components/tools/CrosswindCalculator'));
+const TimeSpeedDistance = lazy(() => import('@/components/tools/TimeSpeedDistance'));
+const FuelCalculator = lazy(() => import('@/components/tools/FuelCalculator'));
+const WindCalculator = lazy(() => import('@/components/tools/WindCalculator'));
+const AltitudeCalculator = lazy(() => import('@/components/tools/AltitudeCalculator'));
+const SunCalculator = lazy(() => import('@/components/tools/SunCalculator'));
+const Timer = lazy(() => import('@/components/tools/Timer'));
+const HoldingPattern = lazy(() => import('@/components/tools/HoldingPattern'));
 
 type Tool = 'weight-balance' | 'density-altitude' | 'crosswind' | 'time-speed-distance' | 'fuel' | 'wind' | 'altitude' | 'sun' | 'timer' | 'holding';
 type Category = 'performance' | 'planning' | 'utility';
@@ -101,6 +103,7 @@ export default function ToolsPage() {
               <p>{currentTool.help}</p>
             </header>
             <div className="av-tools-calculator max-w-4xl" data-tool={activeTool}>
+              <Suspense key={activeTool} fallback={<p role="status" className="p-6">Loading {currentTool.label}…</p>}>
               {activeTool === 'weight-balance' && <WeightBalance />}
               {activeTool === 'density-altitude' && <DensityAltitude />}
               {activeTool === 'crosswind' && <CrosswindCalculator />}
@@ -111,6 +114,7 @@ export default function ToolsPage() {
               {activeTool === 'sun' && <SunCalculator />}
               {activeTool === 'timer' && <Timer />}
               {activeTool === 'holding' && <HoldingPattern />}
+              </Suspense>
             </div>
           </section>
         </div>

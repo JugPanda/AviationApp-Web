@@ -9,7 +9,7 @@ import { GET as getPireps } from '@/app/api/pirep/route';
 import { GET as getSigmets } from '@/app/api/sigmet/route';
 import SigmetLayer from '@/components/SigmetLayer';
 
-const map = {};
+const map = { getContainer: () => document.body.firstElementChild as HTMLElement };
 vi.mock('react-leaflet', () => ({
   useMap: () => map,
   Polygon: ({ positions, children }: { positions: unknown; children: ReactNode }) =>
@@ -23,7 +23,11 @@ vi.mock('@/components/MapLayerNotice', () => ({
 const req = (path: string) => new NextRequest(`http://localhost/api/${path}`);
 const notams = () => getNotams(req('notam/KJFK'), { params: Promise.resolve({ icao: 'KJFK' }) });
 const respond = (body: unknown, status = 200) => new Response(status === 204 ? null : JSON.stringify(body), { status });
-const upstream = (body: unknown, status = 200) => vi.stubGlobal('fetch', vi.fn(async () => respond(body, status)));
+const upstream = (body: unknown, status = 200) => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+  // Legacy SIGMET fixtures do not stand in for the newly added provider contracts.
+  if (Array.isArray(body) && /\/g?airmet\?/.test(url)) return respond(null, 204);
+  return respond(body, status);
+}));
 
 // Provider-shaped fixture: AWC /api/data/airsigmet?format=json bounded GET,
 // 2026-11-22. Epoch seconds + {lon,lat}; raw text shortened for this test.
@@ -50,11 +54,11 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('weather no-data versus failure contracts', () => {
-  it('discloses absent AIRMET coverage even for successful empty SIGMET feeds', async () => {
+  it('discloses snapshot and forecast-zone limits even for successful empty feeds', async () => {
     upstream(null, 204);
     const response = await getSigmets(req('sigmet?type=all'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ items: [], status: 'live', message: expect.stringContaining('not G-AIRMETs or Alaska AIRMETs') });
+    expect(await response.json()).toMatchObject({ items: [], status: 'live', message: expect.stringContaining('forecast snapshots, not continuous validity') });
   });
   it.each([
     ['METAR', () => getMetars(req('metar?ids=KJFK')), []],

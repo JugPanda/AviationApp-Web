@@ -18,6 +18,7 @@ export default function Timer() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [laps, setLaps] = useState<Lap[]>([]);
   const startTimeRef = useRef<number>(0);
+  const elapsedRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Countdown state
@@ -35,9 +36,10 @@ export default function Timer() {
   // Stopwatch logic
   useEffect(() => {
     if (isRunning) {
-      startTimeRef.current = Date.now() - elapsedMs;
+      startTimeRef.current = Date.now() - elapsedRef.current;
       intervalRef.current = setInterval(() => {
-        setElapsedMs(Date.now() - startTimeRef.current);
+        elapsedRef.current = Date.now() - startTimeRef.current;
+        setElapsedMs(elapsedRef.current);
       }, 10);
     }
     return () => {
@@ -82,11 +84,16 @@ export default function Timer() {
   };
 
   const toggleStopwatch = useCallback(() => {
+    if (isRunning) {
+      elapsedRef.current = Date.now() - startTimeRef.current;
+      setElapsedMs(elapsedRef.current);
+    }
     setIsRunning(prev => !prev);
-  }, []);
+  }, [isRunning]);
 
   const resetStopwatch = useCallback(() => {
     setIsRunning(false);
+    elapsedRef.current = 0;
     setElapsedMs(0);
     setLaps([]);
   }, []);

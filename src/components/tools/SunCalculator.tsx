@@ -176,7 +176,6 @@ export default function SunCalculator() {
   const [latitude, setLatitude] = useState<string>('40.7128');
   const [longitude, setLongitude] = useState<string>('-74.0060');
   const [timezone, setTimezone] = useState<string>('-5');
-  const [locationName, setLocationName] = useState<string>('New York, NY');
 
   // Try to get user's location
   useEffect(() => {
@@ -185,7 +184,6 @@ export default function SunCalculator() {
         (position) => {
           setLatitude(position.coords.latitude.toFixed(4));
           setLongitude(position.coords.longitude.toFixed(4));
-          setLocationName('Current Location');
           // Estimate timezone from longitude (rough approximation)
           const tz = Math.round(position.coords.longitude / 15);
           setTimezone(tz.toString());
@@ -219,7 +217,6 @@ export default function SunCalculator() {
     setLatitude(preset.lat);
     setLongitude(preset.lon);
     setTimezone(preset.tz);
-    setLocationName(preset.name);
   };
 
   return (

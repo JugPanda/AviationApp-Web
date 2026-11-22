@@ -126,7 +126,7 @@ export default function PirepLayer({ visible }: PirepLayerProps) {
 
   return (
     <>
-      <MapLayerNotice message={notice} position="top-left" tone="amber" />
+      <MapLayerNotice message={notice} title="Pilot reports" position="top-left" tone="amber" />
       {pireps.map((pirep) => {
         const color = getPirepColor(pirep);
         const icon = getPirepIcon(pirep);

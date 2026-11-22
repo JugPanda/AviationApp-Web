@@ -1092,6 +1092,24 @@
   height: auto;
   aspect-ratio: 40 / 27;
 }
+.walkthrough-media-actions {
+  padding: 20px;
+  color: #b7c4cb;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.walkthrough-media-actions p {
+  margin: 12px 0;
+}
+.walkthrough-media-actions a {
+  color: #e2f2ed;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.walkthrough-media-actions button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
 .walkthrough-player figcaption {
   padding: 14px 20px;
   font-size: 11px;

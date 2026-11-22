@@ -5,11 +5,15 @@ const AIRPORTS_URL = 'https://davidmegginson.github.io/ourairports-data/airports
 const RUNWAYS_URL = 'https://davidmegginson.github.io/ourairports-data/runways.csv';
 const FREQUENCIES_URL = 'https://davidmegginson.github.io/ourairports-data/airport-frequencies.csv';
 
-// Cache for parsed data (in-memory, refreshes on cold start)
-let airportsCache: Map<string, AirportData> | null = null;
-let runwaysCache: Map<string, RunwayData[]> | null = null;
-let frequenciesCache: Map<string, FrequencyData[]> | null = null;
-let lastFetch = 0;
+// One bounded process-local snapshot; cold starts fetch again.
+interface AirportSnapshot {
+  airports: Map<string, AirportData>;
+  runways: Map<string, RunwayData[]>;
+  frequencies: Map<string, FrequencyData[]>;
+  fetchedAt: number;
+}
+let cache: AirportSnapshot | null = null;
+let inFlight: Promise<AirportSnapshot> | null = null;
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 interface AirportData {
@@ -49,51 +53,87 @@ interface FrequencyData {
   frequency_mhz: string;
 }
 
-async function parseCSV(url: string): Promise<string[][]> {
-  const res = await fetch(url, { next: { revalidate: 86400 } });
+async function parseCSV(url: string, columns: string[]): Promise<string[][]> {
+  // These CSVs exceed Next's Data Cache item limit; cache only parsed snapshots.
+  const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`OurAirports retrieval failed: ${res.status}`);
   const text = await res.text();
-  const lines = text.split('\n');
-  return lines.map(line => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (const char of line) {
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim());
-        current = '';
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        current += '"';
+        i++;
       } else {
-        current += char;
+        inQuotes = !inQuotes;
       }
+    } else if (char === ',' && !inQuotes) {
+      row.push(current.trim());
+      current = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      row.push(current.trim());
+      if (row.some(value => value !== '')) rows.push(row);
+      row = [];
+      current = '';
+      if (char === '\r' && text[i + 1] === '\n') i++;
+    } else {
+      current += char;
     }
-    result.push(current.trim());
-    return result;
-  });
+  }
+  if (inQuotes) throw new Error('Unterminated OurAirports CSV field');
+  row.push(current.trim());
+  if (row.some(value => value !== '')) rows.push(row);
+
+  const headers = rows.shift();
+  if (!headers || new Set(headers).size !== headers.length || rows.length === 0) {
+    throw new Error('Empty or invalid OurAirports CSV');
+  }
+  const indices = columns.map(column => headers.indexOf(column));
+  if (indices.some(index => index < 0) || rows.some(values => values.length !== headers.length)) {
+    throw new Error('Unexpected OurAirports CSV schema');
+  }
+  // Project only required fields by name, allowing additive upstream columns.
+  return rows.map(values => indices.map(index => values[index]));
 }
 
-async function loadData() {
-  const now = Date.now();
-  if (airportsCache && runwaysCache && frequenciesCache && (now - lastFetch) < CACHE_TTL) {
-    return;
+async function loadData(): Promise<AirportSnapshot> {
+  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) return cache;
+  if (!inFlight) {
+    inFlight = refreshData().then(snapshot => {
+      cache = snapshot; // Publish all three maps together, only after success.
+      return snapshot;
+    }).finally(() => {
+      inFlight = null; // Failures remain retryable; never renew stale data.
+    });
   }
+  return inFlight;
+}
+
+async function refreshData(): Promise<AirportSnapshot> {
 
   console.log('Loading OurAirports data...');
   
-  const [airportsData, runwaysData, frequenciesData] = await Promise.all([
-    parseCSV(AIRPORTS_URL),
-    parseCSV(RUNWAYS_URL),
-    parseCSV(FREQUENCIES_URL),
+  // Settle every retrieval before releasing the shared load, including failures.
+  const results = await Promise.allSettled([
+    parseCSV(AIRPORTS_URL, ['id', 'ident', 'type', 'name', 'latitude_deg', 'longitude_deg', 'elevation_ft', 'continent', 'iso_country', 'iso_region', 'municipality', 'scheduled_service', 'gps_code', 'iata_code', 'local_code', 'home_link', 'wikipedia_link']),
+    parseCSV(RUNWAYS_URL, ['id', 'airport_ref', 'airport_ident', 'length_ft', 'width_ft', 'surface', 'lighted', 'closed', 'le_ident', 'le_heading_degT', 'le_elevation_ft', 'le_latitude_deg', 'le_longitude_deg', 'le_displaced_threshold_ft', 'he_ident', 'he_heading_degT', 'he_elevation_ft']),
+    parseCSV(FREQUENCIES_URL, ['id', 'airport_ref', 'airport_ident', 'type', 'description', 'frequency_mhz']),
   ]);
+  const [airportsData, runwaysData, frequenciesData] = results.map(result => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
 
   // Parse airports
-  airportsCache = new Map();
-  const airportHeaders = airportsData[0];
-  for (let i = 1; i < airportsData.length; i++) {
+  const airportsCache = new Map<string, AirportData>();
+  for (let i = 0; i < airportsData.length; i++) {
     const row = airportsData[i];
-    if (row.length < 5) continue;
     const ident = row[1]; // ident column
-    if (!ident) continue;
+    if (!ident) throw new Error('Missing airport identifier');
     
     airportsCache.set(ident.toUpperCase(), {
       ident: row[1],
@@ -114,12 +154,11 @@ async function loadData() {
   }
 
   // Parse runways
-  runwaysCache = new Map();
-  for (let i = 1; i < runwaysData.length; i++) {
+  const runwaysCache = new Map<string, RunwayData[]>();
+  for (let i = 0; i < runwaysData.length; i++) {
     const row = runwaysData[i];
-    if (row.length < 10) continue;
     const airportIdent = row[2]; // airport_ident column
-    if (!airportIdent) continue;
+    if (!airportIdent) throw new Error('Missing runway airport identifier');
     
     const runway: RunwayData = {
       le_ident: row[8],
@@ -143,12 +182,11 @@ async function loadData() {
   }
 
   // Parse frequencies
-  frequenciesCache = new Map();
-  for (let i = 1; i < frequenciesData.length; i++) {
+  const frequenciesCache = new Map<string, FrequencyData[]>();
+  for (let i = 0; i < frequenciesData.length; i++) {
     const row = frequenciesData[i];
-    if (row.length < 5) continue;
     const airportIdent = row[2]; // airport_ident column
-    if (!airportIdent) continue;
+    if (!airportIdent) throw new Error('Missing frequency airport identifier');
     
     const freq: FrequencyData = {
       type: row[3],
@@ -163,8 +201,7 @@ async function loadData() {
     frequenciesCache.get(key)!.push(freq);
   }
 
-  lastFetch = now;
-  console.log(`Loaded ${airportsCache.size} airports, ${runwaysCache.size} runway sets, ${frequenciesCache.size} frequency sets`);
+  return { airports: airportsCache, runways: runwaysCache, frequencies: frequenciesCache, fetchedAt: Date.now() };
 }
 
 export async function GET(
@@ -175,11 +212,11 @@ export async function GET(
     const { icao } = await params;
     const icaoUpper = icao.toUpperCase();
     
-    await loadData();
+    const snapshot = await loadData();
 
-    const airport = airportsCache?.get(icaoUpper);
-    const runways = runwaysCache?.get(icaoUpper) || [];
-    const frequencies = frequenciesCache?.get(icaoUpper) || [];
+    const airport = snapshot.airports.get(icaoUpper);
+    const runways = snapshot.runways.get(icaoUpper) || [];
+    const frequencies = snapshot.frequencies.get(icaoUpper) || [];
 
     if (!airport) {
       return NextResponse.json({ error: 'Airport not found' }, { status: 404 });

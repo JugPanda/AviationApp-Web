@@ -93,14 +93,12 @@ export default function AirspaceLayer({
   showClassD = true 
 }: AirspaceLayerProps) {
   const [airspaces, setAirspaces] = useState<AirspaceData[]>([]);
-  const [loading, setLoading] = useState(false);
   const map = useMap();
 
   useEffect(() => {
     if (!visible) return;
 
     const fetchAirspace = async () => {
-      setLoading(true);
       try {
         const bounds = map.getBounds();
         const boundsParam = `${bounds.getSouth()},${bounds.getNorth()},${bounds.getWest()},${bounds.getEast()}`;
@@ -118,8 +116,6 @@ export default function AirspaceLayer({
         }
       } catch (error) {
         console.error('Airspace fetch error:', error);
-      } finally {
-        setLoading(false);
       }
     };
 

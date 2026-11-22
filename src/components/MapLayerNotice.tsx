@@ -32,16 +32,21 @@ export default function MapLayerNotice({
   // The Leaflet context already owns a mounted map container. Its parent is
   // derived from that context, not separately mirrored in React state.
   const host = map.getContainer().parentElement;
+  const stack = host?.querySelector('[data-map-layer-notices]');
 
   if (!message || !host) {
     return null;
   }
 
   return createPortal(
-    <div style={{ maxWidth: 'min(320px, calc(100% - 5rem))' }} className={`pointer-events-none absolute z-[950] rounded-2xl border px-3 py-2 text-xs shadow-lg backdrop-blur-sm ${POSITION_CLASS[position]} ${TONE_CLASS[tone]}`} role="status" aria-live="polite">
-      <div className="font-semibold">{title}</div>
-      <div className="mt-1 text-[11px] leading-relaxed text-current/90">{message}</div>
+    <div style={stack ? undefined : { maxWidth: 'min(320px, calc(100% - 5rem))' }} className={`shrink-0 rounded-xl border px-3 text-xs shadow-lg ${stack ? '' : `absolute z-[950] ${POSITION_CLASS[position]}`} ${TONE_CLASS[tone]}`} role="status" aria-live="polite">
+      <details>
+        <summary className="min-h-12 cursor-pointer py-3 leading-relaxed">
+          <strong>{title}</strong> · {/incomplete/i.test(message) ? 'Incomplete' : /unavailable|unable|failed/i.test(message) ? 'Unavailable' : 'Limits'} — details
+        </summary>
+        <p className="pb-3 text-[11px] leading-relaxed">{message}</p>
+      </details>
     </div>,
-    host
+    stack || host
   );
 }

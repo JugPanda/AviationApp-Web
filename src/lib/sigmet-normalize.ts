@@ -11,6 +11,13 @@ export interface SigmetData {
   rawText: string;
   coords: { lat: number; lng: number }[];
   isActive: boolean;
+  product?: 'G-AIRMET' | 'Alaska AIRMET';
+  timeKind?: 'period' | 'snapshot';
+  snapshotTime?: string;
+  issuedAt?: string;
+  productExpiresAt?: string;
+  altitudeDescription?: string;
+  zone?: string;
 }
 
 type Point = SigmetData['coords'][number];
@@ -22,7 +29,7 @@ const altitude = (...values: unknown[]): number | undefined => values.find(finit
 
 // AWC JSON validTime* are epoch SECONDS, not JavaScript milliseconds.
 // https://aviationweather.gov/data/schema/openapi.yaml (ISigmetJSON/AirSigmetJSON).
-function validity(value: unknown): string | null {
+export function validity(value: unknown): string | null {
   const milliseconds = finite(value) && Number.isInteger(value) && value >= 0 && value < 1e11
     ? value * 1000
     : typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)
@@ -47,6 +54,9 @@ export function isSigmetRing(value: unknown): value is Point[] {
   )) return false;
   const points = value as Point[];
   if (new Set(points.map(p => `${p.lat},${p.lng}`)).size < 3) return false;
+  // Flat Leaflet rings do not split the antimeridian: a jump would cover the
+  // wrong side of the world. Require provider-split rings, including closing edge.
+  if (points.some((p, i) => Math.abs(p.lng - points[(i + 1) % points.length].lng) > 180)) return false;
   // Unwrap longitude only for degeneracy checking; preserve provider vertices.
   const longitudes = [points[0].lng];
   for (let i = 1; i < points.length; i++) {
@@ -64,11 +74,25 @@ export function isSigmetRing(value: unknown): value is Point[] {
 
 export function isRenderableSigmet(value: unknown): value is SigmetData {
   if (!record(value)) return false;
+  if (value.product !== undefined && value.product !== 'G-AIRMET' && value.product !== 'Alaska AIRMET') return false;
+  if (value.product === 'Alaska AIRMET' && (value.type !== 'AIRMET' || value.timeKind !== 'period' || typeof value.zone !== 'string')) return false;
+  if (value.timeKind !== undefined && value.timeKind !== 'period' && value.timeKind !== 'snapshot') return false;
+  const snapshot = value.timeKind === 'snapshot';
+  if (snapshot && (value.product !== 'G-AIRMET' || value.type !== 'AIRMET' || value.isActive !== false ||
+    typeof value.issuedAt !== 'string' || typeof value.productExpiresAt !== 'string' ||
+    value.snapshotTime !== value.validFrom || value.validFrom !== value.validTo ||
+    !validity(value.issuedAt) || !validity(value.productExpiresAt) ||
+    Date.parse(value.issuedAt) > Date.now() ||
+    Date.parse(String(value.issuedAt)) >= Date.parse(String(value.productExpiresAt)) ||
+    Date.parse(String(value.snapshotTime)) > Date.parse(String(value.productExpiresAt)))) return false;
+  if (value.product === 'G-AIRMET' && !snapshot) return false;
   return typeof value.id === 'string' && (value.type === 'SIGMET' || value.type === 'AIRMET') &&
     typeof value.subType === 'string' && typeof value.hazard === 'string' && typeof value.rawText === 'string' &&
     typeof value.validFrom === 'string' && typeof value.validTo === 'string' &&
     validity(value.validFrom) !== null && validity(value.validTo) !== null &&
-    Date.parse(value.validFrom) < Date.parse(value.validTo) && typeof value.isActive === 'boolean' &&
+    (snapshot || Date.parse(value.validFrom) < Date.parse(value.validTo)) && typeof value.isActive === 'boolean' &&
+    (value.altitudeDescription === undefined || typeof value.altitudeDescription === 'string') &&
+    (value.zone === undefined || typeof value.zone === 'string') &&
     (value.altitudeLow === undefined || finite(value.altitudeLow)) &&
     (value.altitudeHigh === undefined || finite(value.altitudeHigh)) && isSigmetRing(value.coords);
 }

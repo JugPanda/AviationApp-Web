@@ -111,8 +111,6 @@ export default function CloudVisualization({
           {sortedClouds.map((cloud, i) => {
             const bottomPercent = (cloud.base / maxAltitude) * 100;
             const heightPercent = Math.max(5, 100 - bottomPercent - 10);
-            const isCeiling = ['BKN', 'OVC', 'VV'].includes(cloud.cover) && 
-              i === sortedClouds.findIndex(c => ['BKN', 'OVC', 'VV'].includes(c.cover));
             
             return (
               <div

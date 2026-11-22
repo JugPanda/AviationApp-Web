@@ -4,6 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PlanPage from '@/app/plan/page';
 
 vi.mock('@/components/AppShell', () => ({ default: ({ children }: { children: ReactNode }) => children }));
+// jsdom isolates component logic; browser specs verify real IndexedDB fences.
+vi.mock('@/lib/plan-write-fence', () => ({
+  fencedPlanWrite: async (_key: string, _expected: string | null, _next: string, commit: () => boolean) => commit(),
+  getExportState: async (key: string) => ({ raw: localStorage.getItem(key), verified: true, recovery: null }),
+  reconcilePlanFence: vi.fn(),
+}));
 
 // Isolated jsdom data only. Dialog shims exercise render/state, not native
 // focus containment; real keyboard and responsive checks live in the spec.

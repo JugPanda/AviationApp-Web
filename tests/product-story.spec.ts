@@ -103,9 +103,20 @@ test("walkthrough is opt-in, playable, pausable and seekable with captions", asy
   const video = page.locator("video");
   await expect(video).toBeInViewport();
   expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
+  await expect(video).not.toHaveAttribute("src");
+  await expect(video.locator("source")).toHaveCount(0);
   expect(mediaRequests).toHaveLength(0);
+  await page.getByRole("button", { name: "Load recording", exact: true }).click();
+  await expect(video).toHaveAttribute("src", "/media/airport-walkthrough.mp4");
+  await expect.poll(() => mediaRequests.length).toBeGreaterThan(0);
+  await expect
+    .poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState))
+    .toBeGreaterThanOrEqual(1);
+  expect(await video.evaluate((v: HTMLVideoElement) => v.paused)).toBe(true);
   const box = await video.boundingBox();
   expect(box).not.toBeNull();
+  // Native control keyboard bindings differ in WebKit; use the visible play
+  // control verified in both engines, not a programmatic video.play() shortcut.
   await video.click({ position: { x: 24, y: box!.height - 48 } });
   await expect
     .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))

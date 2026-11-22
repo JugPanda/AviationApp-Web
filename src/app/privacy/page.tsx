@@ -26,9 +26,11 @@ export default function PrivacyPage() {
           profiles, calculator preferences and recent airport briefings in
           browser storage. A service worker can cache previously visited pages
           and assets. These records do not automatically sync to other devices.
-          Export logbook entries and aircraft profiles before clearing site
+          Export saved plans, logbook entries and aircraft profiles before clearing site
           data. Clearing this site’s browser storage removes locally saved
           records and preferences.
+          {' '}The planner also stores a local IndexedDB fingerprint to reject
+          conflicting tab writes. It contains no plan contents and is not cloud sync.
         </p>
         <h2>Requests and third parties</h2>
         <p>

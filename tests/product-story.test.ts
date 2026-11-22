@@ -23,9 +23,12 @@ describe("truthful product story", () => {
   });
   it("keeps video opt-in with captions and plain-text steps", () => {
     const page = read("src/app/page.tsx");
-    expect(page).toContain('preload="none"');
-    expect(page).not.toMatch(/autoPlay|autoplay|<video[^>]*loop/);
-    expect(page).toContain('kind="captions"');
+    const player = read("src/components/WalkthroughPlayer.tsx");
+    expect(page).toContain('<WalkthroughPlayer />');
+    expect(player).toContain('preload={loaded ? "metadata" : "none"}');
+    expect(player).toContain('src={loaded ? "/media/airport-walkthrough.mp4" : undefined}');
+    expect(player).not.toMatch(/autoPlay|autoplay|<video[^>]*loop/);
+    expect(player).toContain('kind="captions"');
     expect(page).toContain('className="walkthrough-steps"');
     expect(
       fs.statSync("public/media/airport-walkthrough.mp4").size,

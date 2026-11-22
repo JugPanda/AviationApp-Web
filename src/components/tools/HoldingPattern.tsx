@@ -9,7 +9,6 @@ export default function HoldingPattern() {
   const [inboundCourse, setInboundCourse] = useState<string>('360');
   const [aircraftHeading, setAircraftHeading] = useState<string>('180');
   const [holdingDirection, setHoldingDirection] = useState<HoldingDirection>('right');
-  const [legTime, setLegTime] = useState<string>('1');
   const [tas, setTas] = useState<string>('120');
   const [windDirection, setWindDirection] = useState<string>('270');
   const [windSpeed, setWindSpeed] = useState<string>('20');
@@ -140,15 +139,6 @@ export default function HoldingPattern() {
     };
     
     // For SVG arc: right turn = clockwise = sweep-flag 1
-    // Turn positions
-    const turn1Center = {
-      x: fixX + (isRight ? turnRadius : -turnRadius),
-      y: fixY - legLength
-    };
-    const turn2Center = {
-      x: fixX + (isRight ? turnRadius : -turnRadius),
-      y: fixY
-    };
     
     const sweepFlag = isRight ? 1 : 0;
     const turn1End = {

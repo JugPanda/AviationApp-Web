@@ -34,13 +34,18 @@ for (const width of [360, 1440]) {
     await page.route('**/api/metar?**', route => route.fulfill({ json: [{ icaoId: 'KAAA', lat: 38.5, lon: -85, fltCat: 'VFR', name: 'Test fixture airport' }] }));
     await page.route('**/api/airport/KAAA', route => route.fulfill({ json: { airport: { ident: 'KAAA', name: 'Test fixture airport' }, runways: [], frequencies: [] } }));
     await page.route('**/api/pirep**', route => route.fulfill({ json: { items: [], status: 'live', updatedAt: new Date().toISOString() } }));
-    await page.route('**/api/sigmet**', route => route.fulfill({ status: 503, json: { items: [{ id: 'test-sigmet', type: 'SIGMET', subType: 'CONVECTIVE', hazard: 'TEST FIXTURE', rawText: 'TEST FIXTURE ONLY', validFrom: new Date(Date.now() - 60000).toISOString(), validTo: new Date(Date.now() + 3600000).toISOString(), coords: [{ lat: 38, lng: -86 }, { lat: 39, lng: -85 }, { lat: 38, lng: -84 }], isActive: true }], status: 'unavailable', message: 'SIGMET coverage is incomplete. Test provider failure; valid available polygons only.', updatedAt: new Date().toISOString() } }));
+    const snapshotTime = new Date(Date.now() + 3600000).toISOString();
+    const base = { id: 'test-sigmet', type: 'SIGMET', subType: 'CONVECTIVE', hazard: 'TEST FIXTURE', rawText: 'TEST FIXTURE ONLY', validFrom: new Date(Date.now() - 60000).toISOString(), validTo: snapshotTime, coords: [{ lat: 38, lng: -86 }, { lat: 39, lng: -85 }, { lat: 38, lng: -84 }], isActive: true };
+    const snapshot = { ...base, id: 'test-gairmet', type: 'AIRMET', product: 'G-AIRMET', subType: 'IFR', timeKind: 'snapshot', snapshotTime, validFrom: snapshotTime, validTo: snapshotTime, issuedAt: base.validFrom, productExpiresAt: new Date(Date.now() + 4 * 3600000).toISOString(), isActive: false };
+    const alaska = { ...base, id: 'test-alaska', type: 'AIRMET', product: 'Alaska AIRMET', timeKind: 'period', subType: 'TURB', zone: 'Synthetic zone for UI test' };
+    await page.route('**/api/sigmet**', route => route.fulfill({ status: 503, json: { items: [base, snapshot, alaska], status: 'unavailable', message: 'SIGMET coverage is incomplete. Test provider failure; valid available polygons only.', updatedAt: new Date().toISOString() } }));
     await page.goto('/map'); await page.locator('.leaflet-container').waitFor();
     await page.getByLabel('Search airport by ICAO code').fill('KAAA'); await page.getByLabel('Search airport by ICAO code').press('Enter');
     await page.getByRole('dialog', { name: 'Airport briefing for KAAA' }).waitFor(); await page.getByRole('button', { name: 'Close airport briefing' }).click();
     // Allow the existing map fly-to to settle before verifying/capturing paint.
     await page.waitForTimeout(1800);
     await page.getByRole('button', { name: /^Weather layers/ }).click(); await page.getByRole('button', { name: /^Hazards/ }).click(); await page.getByRole('button', { name: 'Close map layers' }).click();
+    await page.locator('summary').filter({ hasText: 'Hazard coverage' }).click();
     await expect(page.getByText('SIGMET coverage is incomplete. Test provider failure; valid available polygons only.')).toBeVisible();
     // Production Leaflet uses preferCanvas: verify actual painted red hazard
     // pixels, not nonexistent SVG paths. Tiles are in a separate layer.
@@ -51,6 +56,24 @@ for (const width of [360, 1440]) {
       return count;
     }, 0))).toBeGreaterThan(20);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-    await page.screenshot({ path: info.outputPath(`partial-hazards-${width}.png`) }); await context.close();
+    await page.screenshot({ path: info.outputPath(`partial-hazards-${width}.png`) });
+    const selector = page.getByLabel('Hazard product time (UTC)', { exact: true });
+    await selector.selectOption(snapshotTime);
+    await expect(page.getByRole('region', { name: 'Hazard product time', exact: true })).toContainText('Not continuous validity');
+    await expect(page.getByRole('region', { name: 'Hazard product time', exact: true })).toContainText('Current SIGMET / Alaska layers hidden');
+    await expect(page.getByText('SIGMET coverage is incomplete. Test provider failure; valid available polygons only.')).toBeVisible();
+    await expect.poll(() => page.locator('.leaflet-overlay-pane canvas').evaluateAll(canvases => canvases.reduce((count, node) => {
+      const canvas = node as HTMLCanvasElement;
+      const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 110 && pixels[i] < 170 && pixels[i + 1] < 130 && pixels[i + 2] > 180 && pixels[i + 3] > 5) count++;
+      return count;
+    }, 0))).toBeGreaterThan(20);
+    expect(await selector.evaluate(element => element.getBoundingClientRect().width <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`gairmet-snapshot-${width}.png`) });
+    await selector.selectOption('alaska');
+    await expect(page.getByRole('region', { name: 'Hazard product time', exact: true })).toContainText('not precise hazard boundaries');
+    await page.screenshot({ path: info.outputPath(`alaska-zones-${width}.png`) });
+    await context.close();
   });
 }

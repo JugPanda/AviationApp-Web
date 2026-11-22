@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import WalkthroughPlayer from "@/components/WalkthroughPlayer";
 import "./landing.css";
 import ProductShowcase, {
   type ShowcaseItem,
@@ -24,7 +25,7 @@ const questions = [
   ],
   [
     "Will my plans appear on all my devices?",
-    "Not yet. Plans, aircraft profiles and logbook entries are saved in the browser where you create them. They do not automatically sync, including with ForeFlight. Logbook and aircraft-profile exports let you keep a separate backup.",
+    "Not yet. Plans, aircraft profiles and logbook entries are saved in the browser where you create them. They do not automatically sync, including with ForeFlight. Plan, logbook and aircraft-profile exports let you keep a separate backup.",
   ],
   [
     "Can I use the weight and balance tool for my aircraft?",
@@ -259,34 +260,12 @@ export default function LandingPage() {
               to the weather picture.
             </h2>
             <p>
-              A short look at the actual preview. Press play when you’re ready;
+              A short look at the actual preview. Load the recording, then play;
               pause, replay or use full screen to see the details.
             </p>
           </div>
           <figure className="walkthrough-player">
-            <video
-              controls
-              playsInline
-              preload="none"
-              width="1280"
-              height="864"
-              poster="/images/walkthrough-poster.webp"
-              aria-label="AV Weather airport search walkthrough"
-              aria-describedby="walkthrough-caption"
-            >
-              <source src="/media/airport-walkthrough.mp4" type="video/mp4" />
-              <track
-                kind="captions"
-                src="/media/airport-walkthrough.vtt"
-                srcLang="en"
-                label="English"
-              />
-              Your browser cannot play this recording.{" "}
-              <a href="/media/airport-walkthrough.mp4">
-                Open the walkthrough video
-              </a>{" "}
-              or read the steps below.
-            </video>
+            <WalkthroughPlayer />
             <figcaption id="walkthrough-caption">
               Recorded browser preview. Captured weather is not current flight
               information. Map imagery: FAA.

@@ -2,20 +2,12 @@
 
 import { containDialogTab } from '@/lib/dialog-focus';
 import { normalizeHeading, solveWindTriangle } from '@/lib/wind-triangle';
+import { fencedPlanWrite, getExportState, reconcilePlanFence, type PlanFenceSnapshot } from '@/lib/plan-write-fence';
+import { BACKUP_LIMITS, createPlanExport, mergePlanCopies, parsePlanBackup, readPlans, type FlightPlan, type Waypoint } from '@/lib/plan-backup';
 
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import AppShell from '@/components/AppShell';
 import './plan.css';
-
-interface Waypoint {
-  id: string;
-  name: string;
-  distance: number; // nm from previous
-  trueCourse: number; // degrees
-  altitude: number; // ft
-  windDirection: number;
-  windSpeed: number;
-}
 
 interface LegResult {
   waypoint: Waypoint;
@@ -29,56 +21,10 @@ interface LegResult {
   cumulativeFuel: number;
 }
 
-interface FlightPlan {
-  id: string;
-  name: string;
-  departure: string;
-  destination: string;
-  waypoints: Waypoint[];
-  aircraftTas: number;
-  fuelBurnRate: number;
-  fuelOnboard: number;
-  reserveMinutes: number;
-  createdAt: number;
-  schemaVersion?: 2;
-  date?: string | null;
-  magneticVariation?: number | null;
-}
-
 const STORAGE_KEY = 'avweather-flightplans';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function validDate(value: unknown): boolean {
-  if (value === undefined || value === null) return true;
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
-// Never silently turn corrupt, partial, or future-schema data into an empty list.
-// Preserve legacy objects (including unknown fields) without writing on load.
-function readPlans(raw: string | null): FlightPlan[] {
-  const plans: unknown = raw === null ? [] : JSON.parse(raw);
-  if (!Array.isArray(plans) || !plans.every(plan => {
-    if (!isRecord(plan)) return false;
-    return ['id', 'name', 'departure', 'destination'].every(k => typeof plan[k] === 'string') && !!plan.id &&
-      ['aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt'].every(k => typeof plan[k] === 'number' && Number.isFinite(plan[k])) &&
-      (plan.schemaVersion === undefined || plan.schemaVersion === 2) && validDate(plan.date) &&
-      (plan.magneticVariation === undefined || plan.magneticVariation === null || (typeof plan.magneticVariation === 'number' && Number.isFinite(plan.magneticVariation))) &&
-      Array.isArray(plan.waypoints) && plan.waypoints.every(wp => isRecord(wp) && typeof wp.id === 'string' && !!wp.id && typeof wp.name === 'string' &&
-        ['distance', 'trueCourse', 'altitude', 'windDirection', 'windSpeed'].every(k => typeof wp[k] === 'number' && Number.isFinite(wp[k]))) &&
-      new Set(plan.waypoints.map(wp => wp.id)).size === plan.waypoints.length;
-  }) || new Set(plans.map(plan => plan.id)).size !== plans.length) {
-    throw new Error('Unsupported or damaged saved plans');
-  }
-  return plans as FlightPlan[];
 }
 
 export default function PlanPage() {
@@ -106,6 +52,13 @@ export default function PlanPage() {
   const [showPrintView, setShowPrintView] = useState(false);
   const [planStatus, setPlanStatus] = useState('');
   const [storageError, setStorageError] = useState('');
+  const [recoverySnapshot, setRecoverySnapshot] = useState<PlanFenceSnapshot | null>(null);
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importPreview, setImportPreview] = useState<{ filename: string; plans: FlightPlan[] } | null>(null);
+  const [importError, setImportError] = useState('');
+  const [readingImport, setReadingImport] = useState(false);
+  const importReadToken = useRef(0);
 
   const refreshPlans = useCallback(() => {
     try {
@@ -115,9 +68,11 @@ export default function PlanPage() {
       storageReady.current = true;
       setSavedPlans(plans);
       setStorageError('');
+      return true;
     } catch {
       storageReady.current = false;
       setStorageError('Saved plans cannot be read safely. Storage may be unavailable or the data damaged or unsupported. Nothing was overwritten. Your draft is still here. Back up the stored data before attempting recovery.');
+      return false;
     }
   }, []);
 
@@ -132,32 +87,153 @@ export default function PlanPage() {
     if (writePending.current) return false;
     writePending.current = true;
     setSaving(true);
+    const expected = storedSnapshot.current;
+    const raw = JSON.stringify(plans);
     const commit = () => {
       if (!storageReady.current) return false;
       const current = localStorage.getItem(STORAGE_KEY);
       readPlans(current);
-      if (current !== storedSnapshot.current) {
+      if (current !== expected) {
         setStorageError('Saved plans changed in another tab. Nothing was overwritten. Your draft is still here. Refresh saved plans, review the list, then try again.');
         return false;
       }
-      const raw = JSON.stringify(plans);
       readPlans(raw);
       localStorage.setItem(STORAGE_KEY, raw);
-      storedSnapshot.current = raw;
-      setSavedPlans(plans);
-      setStorageError('');
       return true;
     };
     try {
       // Serialize cooperating tabs where Web Locks are available; the snapshot
       // check still rejects stale editors rather than overwriting their records.
-      return navigator.locks ? await navigator.locks.request(STORAGE_KEY, commit) : commit();
+      const coordinated = () => fencedPlanWrite(STORAGE_KEY, expected, raw, commit);
+      const saved = navigator.locks ? await navigator.locks.request(STORAGE_KEY, coordinated) : await coordinated();
+      if (saved) {
+        storedSnapshot.current = raw;
+        setSavedPlans(plans);
+        setStorageError('');
+        setRecoverySnapshot(null);
+        setRecoveryAcknowledged(false);
+      } else if (storageReady.current) {
+        setStorageError('Saved plans changed in another tab. Nothing was overwritten. Your draft is still here. Refresh saved plans, review the list, then try again. If this persists, export a recovery backup and close older app tabs.');
+      }
+      return saved;
     } catch {
-      setStorageError('Could not save changes in this browser. No changes were saved; your draft is still here. Check storage permissions and available space. If stored data is damaged, back it up before recovery.');
+      setStorageError('Could not save changes in this browser. Your draft is still here. Check storage permissions and available space. Export saved records before retrying an interrupted save or repairing damaged data.');
       return false;
     } finally {
       writePending.current = false;
       setSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (writePending.current) return;
+    writePending.current = true;
+    setSaving(true);
+    setRecoverySnapshot(null);
+    setRecoveryAcknowledged(false);
+    try {
+      // A fresh localStorage read can itself be stale in another process. Check
+      // its fingerprint, without refreshing the editor's write snapshot.
+      const state = await getExportState(STORAGE_KEY);
+      const backup = state.verified ? createPlanExport(state.raw) : {
+        content: state.raw ?? '', filename: 'avweather-plans-recovery.txt', rawRecovery: true, count: null,
+      };
+      const url = URL.createObjectURL(new Blob([backup.content], { type: backup.rawRecovery ? 'text/plain;charset=utf-8' : 'application/json;charset=utf-8' }));
+      const link = document.createElement('a');
+      try {
+        link.href = url;
+        link.download = backup.filename;
+        document.body.append(link);
+        link.click();
+      } finally {
+        link.remove();
+        // Give the browser time to consume the download before releasing it.
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+      if (backup.rawRecovery) setRecoverySnapshot(state.recovery);
+      setPlanStatus(!state.verified
+        ? 'Incomplete / unverified backup: raw recovery download requested with the exact snapshot visible to this tab. It may be stale or omit newer saved plans; write protection could not confirm it. Review this file and save copies from every other tab before closing those tabs. Unsaved editor changes are not included. Nothing in this browser was changed.'
+        : backup.rawRecovery
+        ? 'Raw recovery download requested. The stored data is damaged, unsupported or exceeds import limits; it was exported unchanged, not repaired. Keep the file for recovery. Nothing in this browser was changed.'
+        : `Backup download requested for ${backup.count} saved ${backup.count === 1 ? 'plan' : 'plans'}. Check your downloads and keep the file safe. Unsaved editor changes are not included.`);
+    } catch {
+      setPlanStatus('Backup could not be downloaded. Browser storage or downloads may be unavailable. Nothing was changed; your draft is still here.');
+    } finally {
+      writePending.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleReconcile = async () => {
+    if (!recoverySnapshot || !recoveryAcknowledged || writePending.current) return;
+    writePending.current = true;
+    setSaving(true);
+    try {
+      const reconcile = () => reconcilePlanFence(STORAGE_KEY, recoverySnapshot);
+      const recovered = navigator.locks ? await navigator.locks.request(STORAGE_KEY, reconcile) : await reconcile();
+      if (!recovered) {
+        setPlanStatus('Recovery refused: saved data or write protection changed after your export. Nothing was changed. Export again, review all copies and close other app tabs before retrying.');
+        return;
+      }
+      const refreshed = refreshPlans();
+      setPlanStatus(`Write protection reconciled. Only its fingerprint was updated; no saved plan bytes or editor values were changed. ${refreshed ? 'The saved-plan list was refreshed. Review it before saving or importing.' : 'The saved-plan list still cannot be read safely; keep your recovery copies and repair the data outside this app before proceeding.'} This does not restore missing records or repair damaged data.`);
+    } catch {
+      setPlanStatus('Recovery could not be completed. Write coordination may be unavailable or denied. No saved plan bytes were changed. Check browser permissions, then export and review again before retrying.');
+    } finally {
+      setRecoverySnapshot(null);
+      setRecoveryAcknowledged(false);
+      writePending.current = false;
+      setSaving(false);
+    }
+  };
+
+  const closeImport = () => {
+    if (writePending.current) return;
+    importReadToken.current++;
+    setShowImportModal(false);
+    setReadingImport(false);
+  };
+
+  const previewImport = async (file: File | undefined) => {
+    const token = ++importReadToken.current;
+    setImportPreview(null);
+    setImportError('');
+    setReadingImport(false);
+    if (!file) return;
+    if (file.size > BACKUP_LIMITS.maxBytes) {
+      setImportError('Backup exceeds the 2 MiB import limit. No plans were imported.');
+      return;
+    }
+    setReadingImport(true);
+    try {
+      const bytes = await file.arrayBuffer();
+      if (token !== importReadToken.current) return;
+      // Fatal decoding rejects damaged text instead of silently replacing bytes
+      // inside a plan name or route with replacement characters.
+      let text: string;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch { throw new Error('Backup is not valid UTF-8 text.'); }
+      const plans = parsePlanBackup(text);
+      setImportPreview({ filename: file.name, plans });
+    } catch (error) {
+      if (token !== importReadToken.current) return;
+      setImportError(`${error instanceof Error ? error.message : 'The backup file could not be read.'} Nothing was changed. Choose a valid backup to try again.`);
+    } finally {
+      if (token === importReadToken.current) setReadingImport(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview?.plans.length || writePending.current || readingImport) return;
+    setImportError('');
+    try {
+      const merged = mergePlanCopies(savedPlans, importPreview.plans, () => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : generateId());
+      if (!await persistPlans(merged)) return;
+      setPlanStatus(`Imported ${importPreview.plans.length} saved ${importPreview.plans.length === 1 ? 'plan' : 'plans'} as new copies. Existing saved plans and your current editor were not replaced. Load a copy when ready and independently verify all inputs.`);
+      setImportPreview(null);
+      setShowImportModal(false);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Import failed. Nothing was changed; your draft is still here.');
     }
   };
 
@@ -452,7 +528,36 @@ export default function PlanPage() {
             <p>Edits are not saved automatically. Save a named copy when you are ready.</p>
           </div>
           <p className="av-plan-status" role="status">{planStatus}</p>
-          {storageError && !showSaveModal && !showLoadModal && <p className="av-plan-caution" role="alert">{storageError}</p>}
+          {storageError && !showSaveModal && !showLoadModal && !showImportModal && <p className="av-plan-caution" role="alert">{storageError}</p>}
+
+          <section className="av-plan-backup" aria-labelledby="plan-backup-title">
+            <div>
+              <h2 id="plan-backup-title">Back up your saved plans</h2>
+              <p>Download all saved plans before clearing browser data or moving devices. Unsaved edits are not included. Imports add new copies; they never replace existing plans or the current editor.</p>
+              <p className="av-plan-hint">Files stay on your device and may contain private route details. No upload or cloud sync. Damaged data can still be exported as a raw recovery file.</p>
+            </div>
+            <div className="av-plan-backup-actions">
+              <button onClick={handleExport} disabled={saving} className="av-plan-button">Export all saved plans</button>
+              <button onClick={() => { setImportPreview(null); setImportError(''); setShowImportModal(true); }} className="av-plan-button">Import plans</button>
+            </div>
+          </section>
+
+          {recoverySnapshot && (
+            <section id="plan-recovery" className="av-plan-backup" aria-labelledby="plan-recovery-title">
+              <div>
+                <h2 id="plan-recovery-title">Recover write protection</h2>
+                <p>The raw snapshot may be stale or incomplete. Check that the download was saved and review its contents against copies from every other tab. Save any unsaved drafts separately, then close all other app tabs, including older versions.</p>
+                <p>This resets only the write-protection fingerprint to this exported snapshot. It does not merge, repair, restore or delete saved plans. No upload or cloud sync. If another writer changes the fingerprint or this tab sees different data, recovery is refused.</p>
+                <label className="av-plan-field">
+                  <input type="checkbox" style={{ width: 48, height: 48 }} checked={recoveryAcknowledged} disabled={saving} onChange={event => setRecoveryAcknowledged(event.target.checked)} />
+                  <span>I have saved and reviewed this recovery file and copies from all other tabs, saved any unsaved drafts, and closed all other app tabs. I understand this snapshot may be stale or incomplete.</span>
+                </label>
+              </div>
+              <div className="av-plan-backup-actions">
+                <button onClick={handleReconcile} disabled={!recoveryAcknowledged || saving} className="av-plan-button">Reconcile write protection</button>
+              </div>
+            </section>
+          )}
 
           <div className="av-plan-setup">
             <section className="av-plan-panel" aria-labelledby="plan-route-title">
@@ -598,6 +703,43 @@ export default function PlanPage() {
           </div>
         </div>
 
+        {showImportModal && (
+          <PlanDialog title="Import saved plans" onDismiss={closeImport}>
+            <p className="av-plan-dialog-description">Choose a plan backup JSON file or a legacy saved-plan array. Review every record before confirming. Validation checks the file structure, not flight safety.</p>
+            <label className="av-plan-field">
+              <span>Plan backup file</span>
+              <input type="file" accept=".json,.txt,application/json,text/plain" aria-describedby="plan-import-limits" disabled={saving} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void previewImport(file); }} autoFocus />
+            </label>
+            <p id="plan-import-limits" className="av-plan-footnote">Maximum 2 MiB, 500 plans, 500 waypoints per plan and 10,000 waypoints total. Invalid files are rejected in full. Raw recovery files may need repair outside this app before they can be imported.</p>
+            <p role="status" className="av-plan-status">{readingImport ? 'Reading and validating backup…' : importPreview ? `${importPreview.plans.length} ${importPreview.plans.length === 1 ? 'plan' : 'plans'} ready for review. Nothing has been imported yet.` : ''}</p>
+            {importError && <p className="av-plan-caution" role="alert">{importError}</p>}
+            {importPreview && (
+              <section className="av-plan-import-preview" aria-labelledby="plan-import-preview-title">
+                <h3 id="plan-import-preview-title">Review import</h3>
+                <p className="av-plan-hint">File: {importPreview.filename}</p>
+                <p>{savedPlans.length} existing saved {savedPlans.length === 1 ? 'plan stays' : 'plans stay'} unchanged. Each imported plan and waypoint receives a new ID, even if its name already exists. Repeating an import adds more copies.</p>
+                {savedPlans.length > 0 && <details><summary>Existing plans that will be kept</summary><ul>{savedPlans.map(plan => <li key={plan.id}>{plan.name || 'Unnamed plan'}</li>)}</ul></details>}
+                {importPreview.plans.length === 0 ? <p>This backup is empty. There are no plans to import.</p> : (
+                  <ul className="av-plan-import-list">
+                    {importPreview.plans.map(plan => (
+                      <li key={plan.id}>
+                        <strong>{plan.name || 'Unnamed plan'}</strong>
+                        <span>{plan.departure || 'No departure'} → {plan.destination || 'No destination'} · {plan.waypoints.length} {plan.waypoints.length === 1 ? 'leg' : 'legs'}</span>
+                        <span>Date: {plan.date ?? 'Not stored / unset'} · Magnetic variation: {plan.magneticVariation == null ? 'Not stored / unset' : `${plan.magneticVariation}°`}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="av-plan-hint">Missing historical dates or magnetic variations stay unset, never filled from today or your editor. Load an imported copy to review all aircraft and leg inputs before use.</p>
+              </section>
+            )}
+            {storageError && <><p className="av-plan-caution" role="alert">{storageError}</p><button onClick={refreshPlans} disabled={saving} className="av-plan-button">Refresh saved plans</button></>}
+            <div className="av-plan-dialog-actions">
+              <button onClick={closeImport} disabled={saving} className="av-plan-button">Cancel</button>
+              <button onClick={confirmImport} disabled={saving || readingImport || !importPreview?.plans.length || !!storageError} className="av-plan-button av-plan-button--primary">{saving ? 'Importing…' : 'Confirm import as new copies'}</button>
+            </div>
+          </PlanDialog>
+        )}
         {showSaveModal && (
           <PlanDialog title="Save flight plan" onDismiss={() => setShowSaveModal(false)}>
             <p className="av-plan-dialog-description">Saved in this browser only, not across devices. Each save creates a new named copy.</p>

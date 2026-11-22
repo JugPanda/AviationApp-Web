@@ -6,6 +6,12 @@ import WindCalculator from '@/components/tools/WindCalculator';
 import { normalizeHeading, solveWindTriangle } from '@/lib/wind-triangle';
 
 vi.mock('@/components/AppShell', () => ({ default: ({ children }: { children: ReactNode }) => children }));
+// jsdom isolates component logic; browser specs verify real IndexedDB fences.
+vi.mock('@/lib/plan-write-fence', () => ({
+  fencedPlanWrite: async (_key: string, _expected: string | null, _next: string, commit: () => boolean) => commit(),
+  getExportState: async (key: string) => ({ raw: localStorage.getItem(key), verified: true, recovery: null }),
+  reconcilePlanFence: vi.fn(),
+}));
 const key = 'avweather-flightplans';
 const legacy = { id: 'legacy', name: 'Legacy fixture', departure: 'KLOU', destination: 'KLEX', waypoints: [{ id: 'wp', name: 'TEST', distance: 50, trueCourse: 90, altitude: 3000, windDirection: 90, windSpeed: 20 }], aircraftTas: 120, fuelBurnRate: 10, fuelOnboard: 40, reserveMinutes: 45, createdAt: 1 };
 let root: Root;

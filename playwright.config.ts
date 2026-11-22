@@ -19,7 +19,8 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || "http://127.0.0.1:3198",
-    launchOptions: {
+    browserName: process.env.PW_BROWSER === 'webkit' ? 'webkit' : 'chromium',
+    launchOptions: process.env.PW_BROWSER === 'webkit' ? {} : {
       executablePath:
         process.env.CHROME_PATH ||
         "/snap/chromium/current/usr/lib/chromium-browser/chrome",
