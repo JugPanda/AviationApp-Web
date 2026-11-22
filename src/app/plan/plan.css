@@ -130,6 +130,8 @@
 .av-plan-print-scroll { max-width: 100%; overflow-x: auto; }
 .av-plan-print-hint { margin-bottom: 12px; font-size: 13px; color: #4b5563; }
 .av-plan-print button { min-height: 48px; }
+.av-plan-print .av-plan-caution { color: #512d0b; background: #fff4e8; border: 1px solid #8f531b; break-inside: avoid; }
+.av-plan-caution p { margin-top: 8px; }
 .av-plan-print :focus-visible { outline: 2px solid #30566d; outline-offset: 3px; }
 
 @media (max-width: 479px) {

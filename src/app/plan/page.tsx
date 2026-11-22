@@ -1,6 +1,7 @@
 'use client';
 
 import { containDialogTab } from '@/lib/dialog-focus';
+import { normalizeHeading, solveWindTriangle } from '@/lib/wind-triangle';
 
 import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import AppShell from '@/components/AppShell';
@@ -39,6 +40,9 @@ interface FlightPlan {
   fuelOnboard: number;
   reserveMinutes: number;
   createdAt: number;
+  schemaVersion?: 2;
+  date?: string | null;
+  magneticVariation?: number | null;
 }
 
 const STORAGE_KEY = 'avweather-flightplans';
@@ -47,16 +51,34 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
 }
 
-function getPlans(): FlightPlan[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function savePlans(plans: FlightPlan[]): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
+function validDate(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+// Never silently turn corrupt, partial, or future-schema data into an empty list.
+// Preserve legacy objects (including unknown fields) without writing on load.
+function readPlans(raw: string | null): FlightPlan[] {
+  const plans: unknown = raw === null ? [] : JSON.parse(raw);
+  if (!Array.isArray(plans) || !plans.every(plan => {
+    if (!isRecord(plan)) return false;
+    return ['id', 'name', 'departure', 'destination'].every(k => typeof plan[k] === 'string') && !!plan.id &&
+      ['aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt'].every(k => typeof plan[k] === 'number' && Number.isFinite(plan[k])) &&
+      (plan.schemaVersion === undefined || plan.schemaVersion === 2) && validDate(plan.date) &&
+      (plan.magneticVariation === undefined || plan.magneticVariation === null || (typeof plan.magneticVariation === 'number' && Number.isFinite(plan.magneticVariation))) &&
+      Array.isArray(plan.waypoints) && plan.waypoints.every(wp => isRecord(wp) && typeof wp.id === 'string' && !!wp.id && typeof wp.name === 'string' &&
+        ['distance', 'trueCourse', 'altitude', 'windDirection', 'windSpeed'].every(k => typeof wp[k] === 'number' && Number.isFinite(wp[k]))) &&
+      new Set(plan.waypoints.map(wp => wp.id)).size === plan.waypoints.length;
+  }) || new Set(plans.map(plan => plan.id)).size !== plans.length) {
+    throw new Error('Unsupported or damaged saved plans');
+  }
+  return plans as FlightPlan[];
 }
 
 export default function PlanPage() {
@@ -69,17 +91,75 @@ export default function PlanPage() {
   const [fuelBurnRate, setFuelBurnRate] = useState<number>(10);
   const [fuelOnboard, setFuelOnboard] = useState<number>(40);
   const [reserveMinutes, setReserveMinutes] = useState<number>(45);
-  const [magneticVariation, setMagneticVariation] = useState<number>(0);
+  const [magneticVariation, setMagneticVariation] = useState<number | null>(0);
+  const [flightDate, setFlightDate] = useState('');
   
   // Saved plans
-  const [savedPlans, setSavedPlans] = useState<FlightPlan[]>(() => getPlans());
+  const [savedPlans, setSavedPlans] = useState<FlightPlan[]>([]);
+  const storedSnapshot = useRef<string | null>(null);
+  const storageReady = useRef(false);
+  const writePending = useRef(false);
+  const [saving, setSaving] = useState(false);
   const [planName, setPlanName] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [showPrintView, setShowPrintView] = useState(false);
   const [planStatus, setPlanStatus] = useState('');
   const [storageError, setStorageError] = useState('');
-  
+
+  const refreshPlans = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const plans = readPlans(raw);
+      storedSnapshot.current = raw;
+      storageReady.current = true;
+      setSavedPlans(plans);
+      setStorageError('');
+    } catch {
+      storageReady.current = false;
+      setStorageError('Saved plans cannot be read safely. Storage may be unavailable or the data damaged or unsupported. Nothing was overwritten. Your draft is still here. Back up the stored data before attempting recovery.');
+    }
+  }, []);
+
+  // Browser-only storage reads avoid server/client hydration disagreement.
+  useEffect(() => {
+    // One-time hydration bootstrap from an external browser store, not derived render state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshPlans();
+  }, [refreshPlans]);
+
+  const persistPlans = async (plans: FlightPlan[]): Promise<boolean> => {
+    if (writePending.current) return false;
+    writePending.current = true;
+    setSaving(true);
+    const commit = () => {
+      if (!storageReady.current) return false;
+      const current = localStorage.getItem(STORAGE_KEY);
+      readPlans(current);
+      if (current !== storedSnapshot.current) {
+        setStorageError('Saved plans changed in another tab. Nothing was overwritten. Your draft is still here. Refresh saved plans, review the list, then try again.');
+        return false;
+      }
+      const raw = JSON.stringify(plans);
+      readPlans(raw);
+      localStorage.setItem(STORAGE_KEY, raw);
+      storedSnapshot.current = raw;
+      setSavedPlans(plans);
+      setStorageError('');
+      return true;
+    };
+    try {
+      // Serialize cooperating tabs where Web Locks are available; the snapshot
+      // check still rejects stale editors rather than overwriting their records.
+      return navigator.locks ? await navigator.locks.request(STORAGE_KEY, commit) : commit();
+    } catch {
+      setStorageError('Could not save changes in this browser. No changes were saved; your draft is still here. Check storage permissions and available space. If stored data is damaged, back it up before recovery.');
+      return false;
+    } finally {
+      writePending.current = false;
+      setSaving(false);
+    }
+  };
 
   const addWaypoint = useCallback(() => {
     setWaypoints(prev => [...prev, {
@@ -103,21 +183,28 @@ export default function PlanPage() {
     ));
   }, []);
 
-  // Calculate all legs
+  const windErrors = useMemo(() => waypoints.flatMap((waypoint, index) => {
+    if (waypoint.distance <= 0) return [];
+    const solution = solveWindTriangle(waypoint.trueCourse, tas, waypoint.windDirection, waypoint.windSpeed);
+    return solution.ok ? [] : [`Leg ${index + 1}: ${solution.error}`];
+  }), [waypoints, tas]);
+  const invalidFuel = ![fuelBurnRate, fuelOnboard, reserveMinutes].every(value => Number.isFinite(value) && value >= 0);
+  const calculationBlocked = windErrors.length > 0 || invalidFuel;
+  const calculationWarning = calculationBlocked ? (
+    <div className="av-plan-caution" role="alert">
+      <strong>Plan totals withheld.</strong> Heading, time and fuel results are withheld until invalid inputs are corrected.
+      {windErrors.map(error => <p key={error}>{error}</p>)}
+      {invalidFuel && <p>Fuel burn, onboard fuel and reserve must be finite, nonnegative values.</p>}
+    </div>
+  ) : null;
+
+  // Calculate all legs only when the complete positive-distance plan is solvable.
   const legs: LegResult[] = useMemo(() => {
+    if (calculationBlocked) return [];
     return waypoints.filter(w => w.distance > 0).reduce<LegResult[]>((results, waypoint) => {
-      // Wind correction calculation
-      const tcRad = (waypoint.trueCourse * Math.PI) / 180;
-      const wdRad = (waypoint.windDirection * Math.PI) / 180;
-      
-      const crosswind = waypoint.windSpeed * Math.sin(wdRad - tcRad);
-      const headwind = waypoint.windSpeed * Math.cos(wdRad - tcRad);
-      
-      const wcaRad = Math.asin(Math.max(-1, Math.min(1, crosswind / tas)));
-      const wca = (wcaRad * 180) / Math.PI;
-      
-      const trueHeading = waypoint.trueCourse + wca;
-      const groundSpeed = Math.max(1, tas * Math.cos(wcaRad) - headwind);
+      const solution = solveWindTriangle(waypoint.trueCourse, tas, waypoint.windDirection, waypoint.windSpeed);
+      if (!solution.ok) return results;
+      const { trueHeading, groundSpeed, windCorrectionAngle: wca } = solution;
       
       // Time and fuel
       const ete = (waypoint.distance / groundSpeed) * 60; // minutes
@@ -141,7 +228,7 @@ export default function PlanPage() {
 
       return results;
     }, []);
-  }, [waypoints, tas, fuelBurnRate]);
+  }, [waypoints, tas, fuelBurnRate, calculationBlocked]);
 
   // Totals
   const totals = useMemo(() => {
@@ -165,7 +252,7 @@ export default function PlanPage() {
   }, [legs, fuelBurnRate, fuelOnboard, reserveMinutes]);
 
   // Save plan
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!planName.trim()) return;
     
     const plan: FlightPlan = {
@@ -178,18 +265,14 @@ export default function PlanPage() {
       fuelBurnRate,
       fuelOnboard,
       reserveMinutes,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      schemaVersion: 2,
+      date: flightDate || null,
+      magneticVariation,
     };
     
     const plans = [...savedPlans, plan];
-    try {
-      savePlans(plans);
-    } catch {
-      setStorageError('Could not save in this browser. Check available storage and browser permissions, then try again.');
-      return;
-    }
-    setSavedPlans(plans);
-    setStorageError('');
+    if (!await persistPlans(plans)) return;
     setPlanStatus(`Saved “${plan.name}” in this browser.`);
     setShowSaveModal(false);
     setPlanName('');
@@ -204,21 +287,16 @@ export default function PlanPage() {
     setFuelBurnRate(plan.fuelBurnRate);
     setFuelOnboard(plan.fuelOnboard);
     setReserveMinutes(plan.reserveMinutes);
-    setPlanStatus(`Loaded “${plan.name}”. Check the date and magnetic variation; they are not stored with plans.`);
+    setFlightDate(plan.date ?? '');
+    setMagneticVariation(plan.magneticVariation ?? null);
+    setPlanStatus(`Loaded “${plan.name}”. ${plan.date == null || plan.magneticVariation == null ? 'Date or magnetic variation was not stored or is unset. Enter verified values before using the log.' : 'Date and magnetic variation restored. Verify them before using the log.'}`);
     setShowLoadModal(false);
   };
 
-  const handleDeletePlan = (id: string) => {
+  const handleDeletePlan = async (id: string) => {
     if (!confirm('Delete this flight plan?')) return;
     const plans = savedPlans.filter(p => p.id !== id);
-    try {
-      savePlans(plans);
-    } catch {
-      setStorageError('Could not delete this plan from browser storage. Try again.');
-      return;
-    }
-    setSavedPlans(plans);
-    setStorageError('');
+    if (!await persistPlans(plans)) return;
     setPlanStatus('Deleted the saved plan from this browser.');
   };
 
@@ -237,7 +315,8 @@ export default function PlanPage() {
             <div>
               <h1 className="text-2xl font-bold">Navigation Log</h1>
               <p className="text-gray-600">{departure || '____'} → {destination || '____'}</p>
-              <p className="text-gray-500 text-sm">{new Date().toLocaleDateString()}</p>
+              <p className="text-gray-500 text-sm">{flightDate || 'Date not set'}</p>
+              <p className="text-gray-500 text-sm">Magnetic variation: {magneticVariation === null ? 'Not set — magnetic headings withheld' : `${magneticVariation}° (west negative; MH = TH − variation)`}</p>
               <p className="text-gray-600 text-xs mt-2">Preview · Supplemental planning only. Independently verify inputs and calculations.</p>
             </div>
             <button 
@@ -257,6 +336,7 @@ export default function PlanPage() {
           </div>
           
           {/* NavLog Table */}
+          {calculationWarning}
           <p className="av-plan-print-hint print:hidden">On a small screen, scroll the navigation table sideways to see every column.</p>
           <div className="av-plan-print-scroll" role="region" aria-label="Printable navigation table" tabIndex={0}>
           <table className="w-full border-collapse border border-gray-300 text-sm mb-6">
@@ -284,7 +364,7 @@ export default function PlanPage() {
                   <td className="border border-gray-300 px-2 py-1 text-center">{leg.waypoint.trueCourse}°</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{leg.wca > 0 ? '+' : ''}{leg.wca}°</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{Math.round(leg.trueHeading)}°</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{Math.round(normalizeHeading(leg.trueHeading + magneticVariation))}°</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{magneticVariation === null ? 'Not set' : `${normalizeHeading(Math.round(leg.trueHeading - magneticVariation))}°`}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{leg.waypoint.windDirection}°/{leg.waypoint.windSpeed}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{leg.groundSpeed}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{leg.waypoint.distance}</td>
@@ -360,9 +440,9 @@ export default function PlanPage() {
             <p className="av-local-note">Saved plans stay in this browser. No device sync.</p>
           </div>
           <div className="av-page-actions">
-            <button onClick={() => { setStorageError(''); setShowLoadModal(true); }} className="av-plan-button">Load plan</button>
-            <button onClick={() => { setStorageError(''); setShowSaveModal(true); }} className="av-plan-button av-plan-button--primary">Save plan</button>
-            <button onClick={() => setShowPrintView(true)} disabled={legs.length === 0} className="av-plan-button" aria-label="Preview printable navigation log">Print</button>
+            <button onClick={() => setShowLoadModal(true)} className="av-plan-button">Load plan</button>
+            <button onClick={() => setShowSaveModal(true)} className="av-plan-button av-plan-button--primary">Save plan</button>
+            <button onClick={() => setShowPrintView(true)} disabled={!waypoints.some(w => w.distance > 0)} className="av-plan-button" aria-label="Preview printable navigation log">Print</button>
           </div>
         </header>
 
@@ -372,6 +452,7 @@ export default function PlanPage() {
             <p>Edits are not saved automatically. Save a named copy when you are ready.</p>
           </div>
           <p className="av-plan-status" role="status">{planStatus}</p>
+          {storageError && !showSaveModal && !showLoadModal && <p className="av-plan-caution" role="alert">{storageError}</p>}
 
           <div className="av-plan-setup">
             <section className="av-plan-panel" aria-labelledby="plan-route-title">
@@ -387,15 +468,15 @@ export default function PlanPage() {
                 </label>
                 <label className="av-plan-field">
                   <span>Mag variation <small>°</small></span>
-                  <input aria-label="Mag Variation" aria-describedby="plan-variation-help" type="number" value={magneticVariation} onChange={e => setMagneticVariation(parseFloat(e.target.value) || 0)} step="0.5" />
-                  <span id="plan-variation-help" className="av-plan-hint">West = negative</span>
+                  <input aria-label="Mag Variation" aria-describedby="plan-variation-help" type="number" value={magneticVariation ?? ''} onChange={e => setMagneticVariation(e.target.value === '' ? null : parseFloat(e.target.value))} step="0.5" placeholder="Not set" />
+                  <span id="plan-variation-help" className="av-plan-hint">West = negative; east = positive. MH = TH − variation.</span>
                 </label>
                 <label className="av-plan-field">
                   <span>Date</span>
-                  <input aria-label="Date" type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                  <input aria-label="Date" type="date" value={flightDate} onChange={e => setFlightDate(e.target.value)} />
                 </label>
               </div>
-              <p className="av-plan-footnote">Date and magnetic variation are not saved with plans. The printed log uses today’s date.</p>
+              <p className="av-plan-footnote">Date and magnetic variation are saved with each new copy. Older plans load missing values as unset. The printed log uses your selected date.</p>
             </section>
 
             <section className="av-plan-panel" aria-labelledby="plan-aircraft-title">
@@ -475,7 +556,7 @@ export default function PlanPage() {
                           </dl>
                         </div>
                       ) : (
-                        <p className="av-plan-empty-leg">Enter a distance greater than zero to see heading, groundspeed, time and fuel for this leg.</p>
+                        <p className="av-plan-empty-leg">{calculationBlocked && wp.distance > 0 ? 'Results withheld. Correct the invalid inputs listed in the plan review.' : 'Enter a distance greater than zero to see heading, groundspeed, time and fuel for this leg.'}</p>
                       )}
                     </article>
                   );
@@ -486,6 +567,7 @@ export default function PlanPage() {
 
             <section className="av-plan-panel av-plan-review" aria-labelledby="plan-review-title">
               <SectionHeading number="04" id="plan-review-title" title="Review your plan" description="Check the totals before saving or printing." />
+              {calculationWarning}
               {totals ? (
                 <>
                   <p className="av-plan-review-count">{legs.length} of {waypoints.length} {waypoints.length === 1 ? 'leg' : 'legs'} included</p>
@@ -503,15 +585,15 @@ export default function PlanPage() {
                     <div><dt>Fuel onboard</dt><dd>{fuelOnboard} gal</dd></div>
                   </dl>
                 </>
-              ) : (
+              ) : !calculationBlocked && (
                 <div className="av-plan-empty-review">
                   <h3>Your totals will appear here</h3>
                   <p>Enter a distance for your first leg, then check its course and wind. Time and fuel update as you edit.</p>
                 </div>
               )}
               <p className="av-plan-review-safety">Supplemental planning only. Independently verify inputs and calculations. These totals do not establish route safety or regulatory fuel compliance.</p>
-              <button onClick={() => setShowPrintView(true)} disabled={legs.length === 0} className="av-plan-button av-plan-review-print">Preview navigation log</button>
-              {!totals && <p className="av-plan-hint">Add a leg distance to enable print preview.</p>}
+              <button onClick={() => setShowPrintView(true)} disabled={!waypoints.some(w => w.distance > 0)} className="av-plan-button av-plan-review-print">Preview navigation log</button>
+              {!waypoints.some(w => w.distance > 0) && <p className="av-plan-hint">Add a leg distance to enable print preview.</p>}
             </section>
           </div>
         </div>
@@ -524,10 +606,10 @@ export default function PlanPage() {
                 <span>Plan name</span>
                 <input type="text" aria-label="Plan name" value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g. Weekend navigation practice" autoFocus required />
               </label>
-              {storageError && <p className="av-plan-caution" role="alert">{storageError}</p>}
+              {storageError && <><p className="av-plan-caution" role="alert">{storageError}</p><button type="button" onClick={refreshPlans} disabled={saving} className="av-plan-button">Refresh saved plans</button></>}
               <div className="av-plan-dialog-actions">
                 <button type="button" onClick={() => setShowSaveModal(false)} className="av-plan-button">Cancel</button>
-                <button type="submit" disabled={!planName.trim()} className="av-plan-button av-plan-button--primary">Save</button>
+                <button type="submit" disabled={!planName.trim() || saving} className="av-plan-button av-plan-button--primary">Save</button>
               </div>
             </form>
           </PlanDialog>
@@ -546,12 +628,12 @@ export default function PlanPage() {
                       <span>{plan.departure || 'No departure'} → {plan.destination || 'No destination'} · {plan.waypoints.length} {plan.waypoints.length === 1 ? 'leg' : 'legs'}</span>
                       <span className="av-plan-saved-action">Load plan →</span>
                     </button>
-                    <button aria-label={`Delete ${plan.name}`} onClick={() => handleDeletePlan(plan.id)} className="av-plan-button av-plan-button--quiet">Delete</button>
+                    <button aria-label={`Delete ${plan.name}`} disabled={saving} onClick={() => handleDeletePlan(plan.id)} className="av-plan-button av-plan-button--quiet">Delete</button>
                   </li>
                 ))}
               </ul>
             )}
-            {storageError && <p className="av-plan-caution" role="alert">{storageError}</p>}
+            {storageError && <><p className="av-plan-caution" role="alert">{storageError}</p><button onClick={refreshPlans} disabled={saving} className="av-plan-button">Refresh saved plans</button></>}
             <button onClick={() => setShowLoadModal(false)} className="av-plan-button av-plan-dialog-close">Close</button>
           </PlanDialog>
         )}
@@ -586,11 +668,4 @@ function PlanDialog({ title, onDismiss, children }: { title: string; onDismiss: 
       {children}
     </dialog>
   );
-}
-
-function normalizeHeading(heading: number): number {
-  let h = heading;
-  while (h < 0) h += 360;
-  while (h >= 360) h -= 360;
-  return h;
 }

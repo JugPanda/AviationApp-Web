@@ -38,15 +38,18 @@ export async function GET(
     });
 
     if (!response.ok) {
-      if (response.status === 404) {
-        return NextResponse.json<NotamResponse>({ notams: [] });
-      }
       throw new Error(`NOTAM API returned ${response.status}`);
     }
 
+    if (response.status === 204) return NextResponse.json<NotamResponse>({ notams: [] });
     const data = await response.json();
+    if (!Array.isArray(data) || data.some(notam => !notam || typeof notam !== 'object' ||
+      typeof (notam.text || notam.notamText || notam.traditionalMessage) !== 'string' ||
+      !(notam.text || notam.notamText || notam.traditionalMessage).trim())) {
+      throw new Error('Malformed NOTAM feed');
+    }
 
-    const notams: NotamData[] = (Array.isArray(data) ? data : []).map((notam: Record<string, unknown>, index: number) => {
+    const notams: NotamData[] = data.map((notam: Record<string, unknown>, index: number) => {
       const text = String(notam.text || notam.notamText || notam.traditionalMessage || '');
 
       return {

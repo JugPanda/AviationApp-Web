@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MetarData } from '@/types';
 import { 
   getFlightCategoryColor, 
@@ -11,7 +11,7 @@ import {
   formatObsTime,
   cn
 } from '@/lib/utils';
-import { formatCacheAge, getCacheFreshness } from '@/lib/cache-freshness';
+import { getCacheFreshness } from '@/lib/cache-freshness';
 import { useHydrated } from '@/lib/use-hydrated';
 import WindDisplay from '@/components/weather/WindDisplay';
 import CloudVisualization from '@/components/weather/CloudVisualization';
@@ -52,9 +52,9 @@ interface AirportDetails {
 interface TafData {
   icaoId: string;
   rawTaf: string;
-  issueTime: string;
-  validFrom: string;
-  validTo: string;
+  issueTime: string | number;
+  validFrom: string | number;
+  validTo: string | number;
   forecasts: {
     type: string;
     raw: string;
@@ -95,7 +95,11 @@ interface CachedBriefingPayload {
   taf?: TafData | null;
   notams?: NotamData[];
   notamNotice?: string | null;
-  cachedAt: number;
+  // Legacy shared time is retained, never used to infer product freshness.
+  cachedAt?: number;
+  detailsRetrievedAt?: number;
+  tafRetrievedAt?: number;
+  notamsRetrievedAt?: number;
 }
 
 function getBriefingCacheKey(icaoId: string) {
@@ -112,18 +116,50 @@ function loadCachedBriefing(icaoId: string): CachedBriefingPayload | null {
   }
 }
 
-function saveCachedBriefing(icaoId: string, next: Partial<CachedBriefingPayload>) {
-  if (typeof window === 'undefined') return;
-  const existing = loadCachedBriefing(icaoId);
-  const payload: CachedBriefingPayload = {
-    details: existing?.details ?? null,
-    taf: existing?.taf ?? null,
-    notams: existing?.notams ?? [],
-    notamNotice: existing?.notamNotice ?? null,
-    cachedAt: Date.now(),
-    ...next,
-  };
-  window.localStorage.setItem(getBriefingCacheKey(icaoId), JSON.stringify(payload));
+function saveCachedBriefing(icaoId: string, next: Partial<CachedBriefingPayload>): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    // Read/merge at write time so concurrent product responses keep each
+    // other's data. A failed read must not turn into an overwriting write.
+    const saved = window.localStorage.getItem(getBriefingCacheKey(icaoId));
+    const existing = saved ? JSON.parse(saved) as CachedBriefingPayload : {};
+    window.localStorage.setItem(getBriefingCacheKey(icaoId), JSON.stringify({ ...existing, ...next }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function retrievalTime(value?: number): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= Date.now() ? value : null;
+}
+
+// The API forwards AWC validity as epoch seconds; older fixtures use ISO.
+// Accept milliseconds too, but never pass seconds directly to Date.
+function tafTime(value: string | number | undefined): number | null {
+  if (value == null || value === '') return null;
+  const numeric = typeof value === 'number' ? value : /^\d+(\.\d+)?$/.test(value) ? Number(value) : NaN;
+  const time = Number.isFinite(numeric)
+    ? numeric < 100_000_000_000 ? numeric * 1000 : numeric
+    : typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(time) && time > 0 && Number.isFinite(new Date(time).getTime()) ? time : null;
+}
+
+function validTafPeriod(taf: TafData) {
+  const from = tafTime(taf.validFrom);
+  const to = tafTime(taf.validTo);
+  return from !== null && to !== null && from < to;
+}
+
+function tafFreshness(taf: TafData | null, retrievedAt: number | null) {
+  const freshness = getCacheFreshness(retrievedAt);
+  if (!taf) return freshness;
+  if (!validTafPeriod(taf)) return 'unknown';
+  const validTo = tafTime(taf.validTo);
+  if ((validTo !== null && validTo <= Date.now()) || freshness === 'expired') return 'expired';
+  if (freshness === 'stale') return 'stale';
+  if (validTo === null) return 'unknown';
+  return freshness;
 }
 
 type AirportTab = 'weather' | 'taf' | 'notams' | 'info' | 'runways' | 'frequencies';
@@ -154,89 +190,114 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
   const [notamLoading, setNotamLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notamNotice, setNotamNotice] = useState<string | null>(cached?.notamNotice ?? null);
-  const [briefingCachedAt, setBriefingCachedAt] = useState<number | null>(cached?.cachedAt ?? null);
-  
-  useEffect(() => {
-    if (!airport?.icaoId) return;
+  const [detailsRetrievedAt, setDetailsRetrievedAt] = useState(() => retrievalTime(cached?.detailsRetrievedAt));
+  const [tafRetrievedAt, setTafRetrievedAt] = useState(() => retrievalTime(cached?.tafRetrievedAt));
+  const [notamsRetrievedAt, setNotamsRetrievedAt] = useState(() => retrievalTime(cached?.notamsRetrievedAt));
+  const [tafError, setTafError] = useState(false);
+  const [tafRetry, setTafRetry] = useState(0);
+  const [notamRetry, setNotamRetry] = useState(0);
+  const [storageWarning, setStorageWarning] = useState(false);
+  // This request snapshot changes only on successful retrieval, not on metadata
+  // updates. Keeping it outside effect dependencies prevents retry/render loops.
+  const tafSnapshot = useRef({ data: tafData, retrievedAt: tafRetrievedAt });
+  const lastTafRetry = useRef(0);
 
+  // Re-evaluate visible age/validity as time passes, without automatically
+  // retrying a failed provider. Selection or the retry button drives requests.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => tick(value => value + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!airport.icaoId) return;
+    let ignore = false;
     fetch(`/api/airport/${airport.icaoId}`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to load airport details');
         return res.json();
       })
       .then(data => {
+        if (ignore) return;
+        const retrievedAt = Date.now();
         setDetails(data);
-        saveCachedBriefing(airport.icaoId, { details: data });
-        setBriefingCachedAt(Date.now());
+        setDetailsRetrievedAt(retrievedAt);
+        if (!saveCachedBriefing(airport.icaoId, { details: data, detailsRetrievedAt: retrievedAt })) setStorageWarning(true);
         setLoading(false);
       })
-      .catch(err => {
-        console.error('Failed to load airport details:', err);
-        if (!cached?.details) {
-          setError('Could not load airport details');
-        }
+      .catch(() => {
+        if (ignore) return;
+        setError(cached?.details ? 'Airport details refresh unavailable. Showing saved details.' : 'Could not load airport details');
         setLoading(false);
       });
+    return () => { ignore = true; };
   }, [airport.icaoId, cached]);
 
-  // Fetch TAF when TAF tab is selected
   useEffect(() => {
-    if (activeTab !== 'taf' || !airport?.icaoId) return;
-    if (tafData?.icaoId === airport.icaoId) return;
-
+    if (activeTab !== 'taf' || !airport.icaoId) return;
+    const snapshot = tafSnapshot.current;
+    const force = lastTafRetry.current !== tafRetry;
+    lastTafRetry.current = tafRetry;
+    if (!force && tafFreshness(snapshot.data, snapshot.retrievedAt) === 'fresh') {
+      setTafLoading(false);
+      return;
+    }
+    let ignore = false;
     const loadTaf = async () => {
       setTafLoading(true);
       try {
         const res = await fetch(`/api/taf?ids=${airport.icaoId}`);
-        if (!res.ok) {
-          throw new Error('Failed to load TAF');
+        if (!res.ok) throw new Error('Failed to load TAF');
+        const data = res.status === 204 ? [] : await res.json();
+        if (!Array.isArray(data)) throw new Error('Invalid TAF response');
+        const nextTaf = data.length === 0 ? null : data.find(item => item?.icaoId === airport.icaoId);
+        if (data.length > 0 && (!nextTaf || typeof nextTaf.rawTaf !== 'string' || !nextTaf.rawTaf.trim() || !Array.isArray(nextTaf.forecasts) || !validTafPeriod(nextTaf))) {
+          throw new Error('Invalid TAF response');
         }
-
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setTafData(data[0]);
-          saveCachedBriefing(airport.icaoId, { taf: data[0] });
-          setBriefingCachedAt(Date.now());
-        } else {
-          setTafData(null);
-        }
+        if (ignore) return;
+        const retrievedAt = Date.now();
+        tafSnapshot.current = { data: nextTaf, retrievedAt };
+        setTafData(nextTaf);
+        setTafRetrievedAt(retrievedAt);
+        setTafError(false);
+        if (!saveCachedBriefing(airport.icaoId, { taf: nextTaf, tafRetrievedAt: retrievedAt })) setStorageWarning(true);
       } catch {
-        setTafData(null);
+        // Retain the last successful report and its original retrieval time.
+        if (!ignore) setTafError(true);
       } finally {
-        setTafLoading(false);
+        if (!ignore) setTafLoading(false);
       }
     };
-
     void loadTaf();
-  }, [activeTab, airport?.icaoId, tafData?.icaoId]);
+    return () => { ignore = true; };
+  }, [activeTab, airport.icaoId, tafRetry]);
 
-  // Fetch NOTAMs when NOTAMs tab is selected
   useEffect(() => {
-    if (activeTab !== 'notams' || !airport?.icaoId) return;
-
+    if (activeTab !== 'notams' || !airport.icaoId) return;
+    let ignore = false;
     const loadNotams = async () => {
-      const cached = loadCachedBriefing(airport.icaoId);
       setNotamLoading(true);
-      setNotamNotice(null);
       try {
         const res = await fetch(`/api/notam/${airport.icaoId}`);
         const data: NotamResponse = await res.json();
-        const nextNotams = Array.isArray(data?.notams) ? data.notams : [];
-        const nextNotice = data?.unavailable ? (data.message ?? 'Live NOTAM source unavailable right now.') : null;
-        setNotams(nextNotams);
-        setNotamNotice(nextNotice);
-        saveCachedBriefing(airport.icaoId, { notams: nextNotams, notamNotice: nextNotice });
-        setBriefingCachedAt(Date.now());
-      } catch {
-        setNotams(cached?.notams ?? []);
-        setNotamNotice(cached?.notams?.length ? 'Showing cached NOTAMs. Reconnect to refresh live data.' : 'Unable to load NOTAMs right now.');
+        if (data?.unavailable) throw new Error(data.message || 'Live NOTAM source unavailable right now.');
+        if (!res.ok || !Array.isArray(data?.notams)) throw new Error('NOTAM source unavailable right now.');
+        if (ignore) return;
+        const retrievedAt = Date.now();
+        setNotams(data.notams);
+        setNotamNotice(null);
+        setNotamsRetrievedAt(retrievedAt);
+        if (!saveCachedBriefing(airport.icaoId, { notams: data.notams, notamNotice: null, notamsRetrievedAt: retrievedAt })) setStorageWarning(true);
+      } catch (error) {
+        if (!ignore) setNotamNotice(`${error instanceof Error ? error.message : 'NOTAM source unavailable right now.'} Verify with an official briefing. Any saved reports below are not a current briefing.`);
       } finally {
-        setNotamLoading(false);
+        if (!ignore) setNotamLoading(false);
       }
     };
-
     void loadNotams();
-  }, [activeTab, airport?.icaoId]);
+    return () => { ignore = true; };
+  }, [activeTab, airport.icaoId, notamRetry]);
   
   if (!airport) return null;
 
@@ -245,12 +306,7 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
   const observationDate = airport.obsTime == null ? null : new Date(airport.obsTime * 1000);
   const observationLabel = observationDate && Number.isFinite(observationDate.getTime())
     ? observationDate.toISOString().replace('T', ' ').replace('.000Z', ' UTC') : 'Not reported';
-  const cacheFreshness = getCacheFreshness(briefingCachedAt);
-  const cacheTone = cacheFreshness === 'expired'
-    ? 'border-red-500/30 bg-red-500/10 text-red-100'
-    : cacheFreshness === 'stale'
-      ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+  const forecastFreshness = tafFreshness(tafData, tafRetrievedAt);
 
   return (
     <div className="av-airport-card bg-slate-800 md:rounded-lg md:border md:border-slate-700 overflow-hidden">
@@ -281,7 +337,7 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       <div className="px-3 sm:px-4 py-2 border-b border-slate-700 bg-slate-800/50">
         <p className="text-slate-300 text-sm">{airport.name || details?.airport?.name || 'Unknown Airport'}</p>
         <p className="av-observation-time"><strong>Observation:</strong> {observationLabel}<br /><span>Check report age. Retrieval time is not observation time.</span></p>
-        <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-0.5">
           {details?.airport?.municipality && (
             <span>{details.airport.municipality}, {details.airport.iso_region?.split('-')[1]}</span>
           )}
@@ -289,11 +345,10 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
             <span>• Elev: {details.airport.elevation_ft.toLocaleString()} ft</span>
           )}
         </div>
-        {briefingCachedAt && (
-          <div className={`mt-2 inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-medium ${cacheTone}`}>
-            {formatCacheAge(briefingCachedAt)}
-            {cacheFreshness !== 'fresh' && <span className="ml-1">• verify before relying</span>}
-          </div>
+        {storageWarning && (
+          <p role="status" className="mt-2 break-words text-xs text-amber-100">
+            Some retrieved data is not saved for offline use. Browser storage is unavailable or full.
+          </p>
         )}
       </div>
 
@@ -318,6 +373,12 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
           Frequencies
         </TabButton>
       </div>
+
+      {(activeTab === 'info' || activeTab === 'runways' || activeTab === 'frequencies') && (
+        <div className="px-3 sm:px-4 pt-3">
+          <ProductRetrieval label="Airport details" retrievedAt={detailsRetrievedAt} />
+        </div>
+      )}
 
       {/* Weather Tab */}
       {activeTab === 'weather' && (
@@ -370,16 +431,32 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       {/* TAF Tab */}
       {activeTab === 'taf' && (
         <div className="p-3 sm:p-4">
-          {tafLoading && <div className="text-center text-slate-400 py-4">Loading TAF...</div>}
-          
-          {!tafLoading && !tafData && (
-            <div className="text-center text-slate-400 py-4">No TAF available for this airport</div>
+          <ProductRetrieval label="TAF" retrievedAt={tafRetrievedAt} />
+          {tafLoading && <p role="status" className="my-3 text-sm text-slate-400">Refreshing TAF…</p>}
+          {tafData && forecastFreshness !== 'fresh' && (
+            <p role="status" className="my-3 break-words rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {forecastFreshness === 'expired' ? 'Expired TAF' : forecastFreshness === 'stale' ? 'Stale TAF' : 'TAF freshness unknown'} — do not rely on this as a current forecast. Verify with an official briefing.
+            </p>
           )}
-          
+          {tafError && (
+            <p role="alert" className="my-3 break-words text-sm text-amber-100">
+              {tafData ? 'TAF refresh unavailable. Showing the last retrieved forecast.' : 'TAF unavailable. The source could not be checked; this does not mean no forecast was issued.'}
+            </p>
+          )}
+          {!tafLoading && !tafError && !tafData && tafRetrievedAt !== null && (
+            <p className="my-3 break-words text-sm text-slate-300">
+              No TAF issued for this airport in the last successful source check.
+              {forecastFreshness !== 'fresh' && ' That check is stale; refresh to verify current availability.'}
+            </p>
+          )}
+          <button type="button" disabled={tafLoading} onClick={() => setTafRetry(value => value + 1)} className="mb-3 min-h-11 rounded border border-slate-500 px-3 py-2 text-sm text-slate-200 disabled:opacity-50">
+            {tafError ? 'Retry TAF' : 'Refresh TAF'}
+          </button>
           {tafData && (
             <div className="space-y-4">
               {/* TAF Header */}
               <div className="text-xs text-slate-400">
+                <p>Issued: {formatTafTime(tafData.issueTime)}</p>
                 Valid: {formatTafTime(tafData.validFrom)} to {formatTafTime(tafData.validTo)}
               </div>
 
@@ -463,15 +540,17 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       {/* NOTAMs Tab */}
       {activeTab === 'notams' && (
         <div className="p-3 sm:p-4">
+          <ProductRetrieval label="NOTAMs" retrievedAt={notamsRetrievedAt} />
           {notamLoading && <div className="text-center text-slate-400 py-4">Loading NOTAMs...</div>}
 
           {notamNotice && (
-            <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            <div role="status" className="my-3 break-words rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
               {notamNotice}
             </div>
           )}
+          {notamNotice && <button type="button" disabled={notamLoading} onClick={() => setNotamRetry(value => value + 1)} className="mb-3 min-h-11 rounded border border-slate-500 px-3 py-2 text-sm disabled:opacity-50">Retry NOTAMs</button>}
           
-          {!notamLoading && notams.length === 0 && !notamNotice && (
+          {!notamLoading && notams.length === 0 && !notamNotice && notamsRetrievedAt !== null && (
             <div className="text-center text-slate-400 py-4">No NOTAMs found</div>
           )}
           
@@ -669,20 +748,29 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
 }
 
 // Helper functions
-function formatTafTime(isoTime: string | undefined): string {
-  if (!isoTime) return '--';
-  try {
-    const date = new Date(isoTime);
-    return date.toLocaleString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit', 
-      minute: '2-digit',
-      timeZoneName: 'short'
-    });
-  } catch {
-    return isoTime;
-  }
+function ProductRetrieval({ label, retrievedAt }: { label: string; retrievedAt: number | null }) {
+  const freshness = getCacheFreshness(retrievedAt);
+  return (
+    <p className="mb-3 min-w-0 break-words text-xs leading-relaxed text-slate-300">
+      <strong>{label} retrieved:</strong> {retrievedAt === null ? 'Unknown' : formatTafTime(retrievedAt)}
+      {freshness !== 'fresh' && <span className="text-amber-100"> · {freshness === 'unknown' ? 'Freshness unknown' : freshness === 'expired' ? 'Retrieval expired' : 'Retrieval stale'}</span>}
+    </p>
+  );
+}
+
+function formatTafTime(value: string | number | undefined): string {
+  const time = tafTime(value);
+  if (time === null) return 'Unknown';
+  return new Date(time).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  });
 }
 
 function formatNotamDate(isoTime: string | undefined): string {

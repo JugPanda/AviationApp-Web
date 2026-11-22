@@ -100,7 +100,7 @@ describe('planner component regression with isolated browser data', () => {
     const saved = JSON.parse(localStorage.getItem('avweather-flightplans') || '[]');
     expect(saved).toHaveLength(1);
     expect(saved[0]).toMatchObject({ departure: 'KLOU', destination: 'KLEX', aircraftTas: 120, fuelBurnRate: 10, fuelOnboard: 40, reserveMinutes: 45 });
-    expect(Object.keys(saved[0]).sort()).toEqual(['id', 'name', 'departure', 'destination', 'waypoints', 'aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt'].sort());
+    expect(Object.keys(saved[0]).sort()).toEqual(['id', 'name', 'departure', 'destination', 'waypoints', 'aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt', 'schemaVersion', 'date', 'magneticVariation'].sort());
     await act(async () => root.unmount());
     root = createRoot(container);
     await act(async () => root.render(createElement(PlanPage)));
@@ -108,7 +108,7 @@ describe('planner component regression with isolated browser data', () => {
     await click('Load Isolated browser data — unit regression');
     expect(container.querySelector<HTMLInputElement>('input[aria-label="Departure"]')?.value).toBe('KLOU');
     expect(value('.av-plan-review', 'Fuel required')).toBe('12.5 gal');
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('not stored with plans');
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('not stored or is unset');
     await click('Preview printable navigation log');
     expect(container.querySelector('h1')?.textContent).toBe('Navigation Log');
     expect(container.querySelector('table')?.textContent).toContain('0:30');

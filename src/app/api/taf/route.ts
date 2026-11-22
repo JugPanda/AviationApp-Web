@@ -56,10 +56,13 @@ export async function GET(request: NextRequest) {
       throw new Error(`TAF API returned ${response.status}`);
     }
 
+    if (response.status === 204) return NextResponse.json([]);
     const data = await response.json();
     
-    if (!Array.isArray(data) || data.length === 0) {
-      return NextResponse.json({ error: 'No TAF data found' }, { status: 404 });
+    if (!Array.isArray(data) || data.some(taf => !taf || typeof taf !== 'object' ||
+      typeof taf.icaoId !== 'string' || !taf.icaoId.trim() ||
+      typeof (taf.rawTAF || taf.rawOb) !== 'string' || !(taf.rawTAF || taf.rawOb).trim())) {
+      throw new Error('Malformed TAF feed');
     }
 
     // Parse and structure the TAF data

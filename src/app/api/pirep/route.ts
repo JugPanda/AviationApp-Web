@@ -67,19 +67,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
     }
 
+    if (response.status === 204) return NextResponse.json(buildLiveOverlayResponse<PirepData>([]));
     const data = await response.json();
     
     if (!Array.isArray(data)) {
       return NextResponse.json(buildUnavailableOverlayResponse<PirepData>(unavailableMessage), { status: 503 });
     }
 
-    const pireps: PirepData[] = data.map((p: RawPirep, i: number) => ({
+    const valid = data.filter((p): p is RawPirep => p !== null && typeof p === 'object' &&
+      typeof p.lat === 'number' && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 &&
+      typeof p.lon === 'number' && Number.isFinite(p.lon) && Math.abs(p.lon) <= 180);
+    const pireps: PirepData[] = valid.map((p: RawPirep, i: number) => ({
       id: p.pirepId || `pirep-${i}`,
       receiptTime: p.receiptTime || '',
       obsTime: p.obsTime || p.receiptTime || '',
       icaoId: p.icaoId,
-      lat: p.lat || 0,
-      lon: p.lon || 0,
+      lat: p.lat,
+      lon: p.lon,
       altitude: p.altFt || p.fltlvl * 100 || 0,
       aircraftType: p.acType,
       reportType: p.reportType === 'URGENT' ? 'URGENT' : 'PIREP',
@@ -101,6 +105,12 @@ export async function GET(request: NextRequest) {
       rawText: p.rawOb || p.rawText || ''
     }));
 
+    if (valid.length !== data.length) {
+      return NextResponse.json({
+        ...buildUnavailableOverlayResponse<PirepData>('PIREP coverage is incomplete: reports with invalid or missing positions were omitted. Cross-check with an official briefing source.'),
+        items: pireps,
+      }, { status: 503 });
+    }
     return NextResponse.json(buildLiveOverlayResponse(pireps));
   } catch (error) {
     console.error('PIREP fetch error:', error);

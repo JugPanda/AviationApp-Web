@@ -1,8 +1,9 @@
 'use client';
 
 import { containDialogTab } from '@/lib/dialog-focus';
+import { envelopeLimits, normalizeEnvelope, validateAircraft, validateLoading } from '@/lib/weight-balance-validation';
 
-import { useState, useEffect, useMemo, useCallback, useId, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useId, useRef, useSyncExternalStore } from 'react';
 import {
   AircraftProfile,
   CustomAircraft,
@@ -117,6 +118,7 @@ interface StationInput {
 interface WeightBalancePreferences {
   fuelGallons: number;
   stationWeights: StationInput[];
+  error?: string;
 }
 
 const DEFAULT_AIRCRAFT_ID = 'C172S';
@@ -126,18 +128,17 @@ function getDefaultStationWeights(aircraft: AircraftData): StationInput[] {
 }
 
 function normalizeStationWeights(rawStations: unknown, aircraft: AircraftData): StationInput[] {
-  const defaults = getDefaultStationWeights(aircraft);
-  if (!Array.isArray(rawStations)) {
-    return defaults;
+  if (!Array.isArray(rawStations) || rawStations.length !== aircraft.stations.length) {
+    return aircraft.stations.map(() => ({ weight: NaN }));
   }
 
   return aircraft.stations.map((_, index) => {
     const candidate = rawStations[index];
-    const weight = typeof candidate === 'object' && candidate !== null && 'weight' in candidate
-      ? Number((candidate as { weight?: unknown }).weight)
+    const weight = typeof candidate === 'object' && candidate !== null && 'weight' in candidate && typeof candidate.weight === 'number'
+      ? candidate.weight
       : NaN;
 
-    return Number.isFinite(weight) ? { weight: Math.max(0, weight) } : defaults[index];
+    return { weight };
   });
 }
 
@@ -151,23 +152,25 @@ function getStoredPreferences(aircraftId: string, aircraft: AircraftData): Weigh
     return fallback;
   }
 
+  let saved: string | null;
+  try { saved = localStorage.getItem(`wb-${aircraftId}`); }
+  catch { return { ...fallback, error: 'Unable to read loading preferences. Using defaults in memory; nothing is saved.' }; }
   try {
-    const saved = localStorage.getItem(`wb-${aircraftId}`);
-    if (!saved) {
+    if (saved === null) {
       return fallback;
     }
 
     const data = JSON.parse(saved);
     const nextFuel = typeof data.fuel === 'number' && Number.isFinite(data.fuel)
-      ? Math.min(Math.max(data.fuel, 0), aircraft.fuelCapacity)
-      : fallback.fuelGallons;
+      ? data.fuel
+      : NaN;
 
     return {
       fuelGallons: nextFuel,
       stationWeights: normalizeStationWeights(data.stations, aircraft),
     };
   } catch {
-    return fallback;
+    return { fuelGallons: NaN, stationWeights: getDefaultStationWeights(aircraft), error: 'Saved loading preferences are damaged. Original data is preserved; repair or back it up before saving.' };
   }
 }
 
@@ -208,7 +211,7 @@ function Modal({ isOpen, onClose, title, children }: {
 }
 
 function computeWeightBalance(aircraft: AircraftData, fuelGallons: number, stationWeights: StationInput[]) {
-  if (stationWeights.length === 0) return null;
+  if (validateLoading(aircraft, fuelGallons, stationWeights.map(station => station.weight)).length) return null;
 
   const emptyMoment = aircraft.emptyWeight * aircraft.emptyArm;
   const fuelWeight = fuelGallons * aircraft.fuelWeight;
@@ -225,27 +228,12 @@ function computeWeightBalance(aircraft: AircraftData, fuelGallons: number, stati
   const totalMoment = emptyMoment + fuelMoment + totalStationMoment;
   const cg = totalMoment / totalWeight;
 
-  const envelope = aircraft.envelope;
-  let cgMin = envelope.points[0].cgMin;
-  let cgMax = envelope.points[0].cgMax;
-
-  for (let i = 1; i < envelope.points.length; i++) {
-    const prev = envelope.points[i - 1];
-    const curr = envelope.points[i];
-    if (totalWeight >= prev.weight && totalWeight <= curr.weight) {
-      const ratio = (totalWeight - prev.weight) / (curr.weight - prev.weight);
-      cgMin = prev.cgMin + ratio * (curr.cgMin - prev.cgMin);
-      cgMax = prev.cgMax + ratio * (curr.cgMax - prev.cgMax);
-      break;
-    }
-    if (totalWeight > curr.weight && i === envelope.points.length - 1) {
-      cgMin = curr.cgMin;
-      cgMax = curr.cgMax;
-    }
-  }
+  const limits = envelopeLimits(aircraft.envelope.points, totalWeight);
+  const cgMin = limits?.cgMin ?? NaN;
+  const cgMax = limits?.cgMax ?? NaN;
 
   const withinWeight = totalWeight <= aircraft.maxGross;
-  const withinCG = cg >= cgMin && cg <= cgMax;
+  const withinCG = !!limits && cg >= cgMin && cg <= cgMax;
 
   return {
     emptyWeight: aircraft.emptyWeight,
@@ -259,6 +247,7 @@ function computeWeightBalance(aircraft: AircraftData, fuelGallons: number, stati
     cg,
     cgMin,
     cgMax,
+    withinEnvelopeWeight: !!limits,
     withinWeight,
     withinCG,
     isValid: withinWeight && withinCG,
@@ -268,21 +257,22 @@ function computeWeightBalance(aircraft: AircraftData, fuelGallons: number, stati
 
 function EnvelopeChart({ envelope, calculations }: { envelope: CGEnvelope; calculations: NonNullable<ReturnType<typeof computeWeightBalance>> }) {
   const patternId = useId();
+  const points = normalizeEnvelope(envelope.points).points;
   const padding = 30;
   const width = 280;
   const height = 200;
-  const minWeight = envelope.points[0].weight;
-  const maxWeight = envelope.points[envelope.points.length - 1].weight;
-  const minCG = Math.min(...envelope.points.map((point) => point.cgMin)) - 2;
-  const maxCG = Math.max(...envelope.points.map((point) => point.cgMax)) + 2;
+  const minWeight = Math.min(points[0].weight, calculations.totalWeight);
+  const maxWeight = Math.max(points[points.length - 1].weight, calculations.totalWeight);
+  const minCG = Math.min(...points.map((point) => point.cgMin), calculations.cg) - 2;
+  const maxCG = Math.max(...points.map((point) => point.cgMax), calculations.cg) + 2;
 
   const scaleX = (cg: number) => padding + ((cg - minCG) / (maxCG - minCG)) * (width - 2 * padding);
   const scaleY = (weight: number) => height - padding - ((weight - minWeight) / (maxWeight - minWeight)) * (height - 2 * padding);
-  const fwdPoints = envelope.points.map((point) => `${scaleX(point.cgMin)},${scaleY(point.weight)}`);
-  const aftPoints = [...envelope.points].reverse().map((point) => `${scaleX(point.cgMax)},${scaleY(point.weight)}`);
+  const fwdPoints = points.map((point) => `${scaleX(point.cgMin)},${scaleY(point.weight)}`);
+  const aftPoints = [...points].reverse().map((point) => `${scaleX(point.cgMax)},${scaleY(point.weight)}`);
   const envelopePath = `M ${fwdPoints.join(' L ')} L ${aftPoints.join(' L ')} Z`;
   const cgX = scaleX(calculations.cg);
-  const cgY = scaleY(Math.min(calculations.totalWeight, maxWeight));
+  const cgY = scaleY(calculations.totalWeight);
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="av-tools-envelope-chart mx-auto">
@@ -304,14 +294,36 @@ function EnvelopeChart({ envelope, calculations }: { envelope: CGEnvelope; calcu
   );
 }
 
+function initialRecords() {
+  const errors: string[] = [];
+  let profiles: AircraftProfile[] = [];
+  let aircraft: CustomAircraft[] = [];
+  if (typeof window === 'undefined') return { profiles, aircraft, error: '' };
+  try { profiles = getProfiles(); } catch (error) { errors.push((error as Error).message); }
+  try { aircraft = getCustomAircraft(); } catch (error) { errors.push((error as Error).message); }
+  return { profiles, aircraft, error: errors.join(' ') };
+}
+
+const subscribeToHydration = () => () => {};
 export default function WeightBalance() {
+  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
+  return hydrated ? <WeightBalanceEditor /> : <p role="status">Loading weight and balance inputs…</p>;
+}
+
+function WeightBalanceEditor() {
+  const [initial] = useState(initialRecords);
+  const [storageError, setStorageError] = useState(initial.error);
+  const [actionError, setActionError] = useState('');
+  const [preferenceError, setPreferenceError] = useState(() => getStoredPreferences(DEFAULT_AIRCRAFT_ID, AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID]).error ?? '');
+  const [loadedSnapshot, setLoadedSnapshot] = useState<CustomAircraft | null>(null);
+  const [editingSnapshot, setEditingSnapshot] = useState<AircraftProfile | null>(null);
   const [selectedAircraft, setSelectedAircraft] = useState(DEFAULT_AIRCRAFT_ID);
   const [fuelGallons, setFuelGallons] = useState(() => getStoredPreferences(DEFAULT_AIRCRAFT_ID, AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID]).fuelGallons);
   const [stationWeights, setStationWeights] = useState<StationInput[]>(() => getStoredPreferences(DEFAULT_AIRCRAFT_ID, AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID]).stationWeights);
   
   // Profile management state
-  const [profiles, setProfiles] = useState<AircraftProfile[]>(() => getProfiles());
-  const [customAircraftList, setCustomAircraftList] = useState<CustomAircraft[]>(() => getCustomAircraft());
+  const [profiles, setProfiles] = useState<AircraftProfile[]>(initial.profiles);
+  const [customAircraftList, setCustomAircraftList] = useState<CustomAircraft[]>(initial.aircraft);
   const [selectedProfile, setSelectedProfile] = useState<string>('');
   
   // Modal states
@@ -359,11 +371,13 @@ export default function WeightBalance() {
     return combined;
   }, [customAircraftList]);
 
-  const aircraft = allAircraft[selectedAircraft] || AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID];
+  const aircraft = loadedSnapshot ?? allAircraft[selectedAircraft] ?? AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID];
 
   const applyAircraftSelection = useCallback((aircraftId: string, nextAircraft?: AircraftData) => {
     const resolvedAircraft = nextAircraft ?? allAircraft[aircraftId] ?? AIRCRAFT_DATABASE[DEFAULT_AIRCRAFT_ID];
     const preferences = getStoredPreferences(aircraftId, resolvedAircraft);
+    setLoadedSnapshot(null);
+    setPreferenceError(preferences.error ?? '');
     setSelectedAircraft(aircraftId);
     setFuelGallons(preferences.fuelGallons);
     setStationWeights(preferences.stationWeights);
@@ -371,17 +385,31 @@ export default function WeightBalance() {
 
   // Save preferences
   useEffect(() => {
-    if (stationWeights.length > 0) {
+    // Loaded profiles are immutable snapshots, not updates to the aircraft library's preferences.
+    if (selectedProfile || loadedSnapshot || validateLoading(aircraft, fuelGallons, stationWeights.map(station => station.weight)).length) return;
+    try {
+      const raw = localStorage.getItem(`wb-${selectedAircraft}`);
+      if (raw !== null) {
+        const stored = JSON.parse(raw);
+        if (!stored || !Number.isFinite(stored.fuel) || !Array.isArray(stored.stations) || !stored.stations.every((station: StationInput) => station && Number.isFinite(station.weight))) {
+          throw new Error('Damaged preferences');
+        }
+      }
       localStorage.setItem(`wb-${selectedAircraft}`, JSON.stringify({
         fuel: fuelGallons,
         stations: stationWeights
       }));
+      // Report the outcome of this external storage synchronization, not derived UI state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreferenceError('');
+    } catch {
+      setPreferenceError('Loading changes are not saved. Local storage is unavailable, full, or contains damaged preferences. Existing saved profiles are unchanged; keep this page open to retain your inputs.');
     }
-  }, [fuelGallons, stationWeights, selectedAircraft]);
+  }, [fuelGallons, stationWeights, selectedAircraft, selectedProfile, loadedSnapshot, aircraft]);
 
   const updateStationWeight = (index: number, weight: number) => {
     const newWeights = [...stationWeights];
-    newWeights[index] = { weight: Math.max(0, weight) };
+    newWeights[index] = { weight };
     setStationWeights(newWeights);
   };
 
@@ -392,22 +420,22 @@ export default function WeightBalance() {
       return;
     }
     
-    const profile = profiles.find(p => p.id === profileId);
+    let profile: AircraftProfile | undefined;
+    try {
+      const latest = getProfiles();
+      setProfiles(latest);
+      profile = latest.find(p => p.id === profileId);
+      if (!profile) throw new Error('This profile was deleted. Choose another profile.');
+      if (!profile.customAircraft && !AIRCRAFT_DATABASE[profile.aircraftType]) throw new Error('This profile is missing its aircraft snapshot. It cannot be loaded safely.');
+    } catch (error) { setActionError((error as Error).message); return; }
     if (!profile) return;
-    
+    setActionError('');
     setSelectedProfile(profileId);
 
     if (profile.customAircraft) {
       const customKey = `custom-${profile.customAircraft.name}`;
-      if (!allAircraft[customKey]) {
-        saveCustomAircraft(profile.customAircraft);
-        setCustomAircraftList(getCustomAircraft());
-      }
-
-      applyAircraftSelection(customKey, {
-        ...profile.customAircraft,
-        stations: profile.customAircraft.stations.map((station) => ({ ...station })),
-      });
+      setSelectedAircraft(customKey);
+      setLoadedSnapshot(profile.customAircraft);
       setFuelGallons(profile.fuelGallons);
       setStationWeights(profile.stationWeights.map((weight) => ({ weight })));
       return;
@@ -416,44 +444,46 @@ export default function WeightBalance() {
     applyAircraftSelection(profile.aircraftType);
     setFuelGallons(profile.fuelGallons);
     setStationWeights(profile.stationWeights.map((weight) => ({ weight })));
-  }, [profiles, allAircraft, applyAircraftSelection]);
+  }, [applyAircraftSelection]);
 
   const handleSaveProfile = useCallback(() => {
     if (!profileName.trim()) return;
-    
-    const profileData = {
-      name: profileName.trim(),
-      aircraftType: selectedAircraft,
-      customAircraft: selectedAircraft.startsWith('custom-') 
-        ? customAircraftList.find(c => `custom-${c.name}` === selectedAircraft)
-        : undefined,
-      fuelGallons,
-      stationWeights: stationWeights.map(s => s.weight),
-    };
-    
-    if (editingProfileId) {
-      updateProfile(editingProfileId, profileData);
-    } else {
-      createProfile(profileData);
-    }
-    
-    setProfiles(getProfiles());
-    setShowSaveModal(false);
-    setProfileName('');
-    setEditingProfileId(null);
-  }, [profileName, selectedAircraft, fuelGallons, stationWeights, editingProfileId, customAircraftList]);
+    try {
+      if (editingProfileId && editingSnapshot) {
+        // Manage → Edit only renames the saved record, never the active loading.
+        updateProfile(editingProfileId, { name: profileName.trim() }, editingSnapshot);
+      } else {
+        const errors = validateLoading(aircraft, fuelGallons, stationWeights.map(station => station.weight));
+        if (errors.length) throw new Error(errors.join(' '));
+        createProfile({
+          name: profileName.trim(), aircraftType: selectedAircraft,
+          customAircraft: selectedAircraft.startsWith('custom-') ? aircraft : undefined,
+          fuelGallons, stationWeights: stationWeights.map(station => station.weight),
+        });
+      }
+      setProfiles(getProfiles());
+      setShowSaveModal(false);
+      setProfileName('');
+      setEditingProfileId(null);
+      setEditingSnapshot(null);
+      setActionError('');
+    } catch (error) { setActionError((error as Error).message); }
+  }, [profileName, selectedAircraft, aircraft, fuelGallons, stationWeights, editingProfileId, editingSnapshot]);
 
   const handleDeleteProfile = useCallback((id: string) => {
     if (confirm('Delete this profile?')) {
-      deleteProfile(id);
-      setProfiles(getProfiles());
-      if (selectedProfile === id) {
-        setSelectedProfile('');
-      }
+      try {
+        deleteProfile(id, profiles.find(profile => profile.id === id));
+        setProfiles(getProfiles());
+        setActionError('');
+        if (selectedProfile === id) setSelectedProfile('');
+      } catch (error) { setActionError((error as Error).message); }
     }
-  }, [selectedProfile]);
+  }, [selectedProfile, profiles]);
 
   const handleEditProfile = useCallback((profile: AircraftProfile) => {
+    setEditingSnapshot(profile);
+    setActionError('');
     setProfileName(profile.name);
     setEditingProfileId(profile.id);
     setShowManageModal(false);
@@ -463,13 +493,16 @@ export default function WeightBalance() {
   // Custom aircraft handlers
   const handleSaveCustomAircraft = useCallback(() => {
     if (!customAircraftForm.name.trim()) return;
-    
-    saveCustomAircraft(customAircraftForm);
-    setCustomAircraftList(getCustomAircraft());
-    applyAircraftSelection(`custom-${customAircraftForm.name}`, {
-      ...customAircraftForm,
-      stations: customAircraftForm.stations.map((station) => ({ ...station })),
-    });
+    const nextAircraft = { ...customAircraftForm, name: customAircraftForm.name.trim(), envelope: { points: normalizeEnvelope(customAircraftForm.envelope.points).points } };
+    try {
+      const errors = validateAircraft(nextAircraft);
+      if (errors.length) throw new Error(errors.join(' '));
+      saveCustomAircraft(nextAircraft);
+      setCustomAircraftList(getCustomAircraft());
+    } catch (error) { setActionError((error as Error).message); return; }
+    setActionError('');
+    setSelectedProfile('');
+    applyAircraftSelection(`custom-${nextAircraft.name}`, nextAircraft);
     setShowCustomAircraftModal(false);
     
     // Reset form
@@ -497,17 +530,19 @@ export default function WeightBalance() {
 
   const handleDeleteCustomAircraft = useCallback((name: string) => {
     if (confirm(`Delete custom aircraft "${name}"?`)) {
-      deleteCustomAircraft(name);
-      setCustomAircraftList(getCustomAircraft());
-      if (selectedAircraft === `custom-${name}`) {
-        applyAircraftSelection(DEFAULT_AIRCRAFT_ID);
-      }
+      try {
+        deleteCustomAircraft(name, customAircraftList.find(aircraft => aircraft.name === name));
+        setCustomAircraftList(getCustomAircraft());
+        setActionError('');
+        if (selectedAircraft === `custom-${name}` && !loadedSnapshot) applyAircraftSelection(DEFAULT_AIRCRAFT_ID);
+      } catch (error) { setActionError((error as Error).message); }
     }
-  }, [selectedAircraft, applyAircraftSelection]);
+  }, [selectedAircraft, applyAircraftSelection, customAircraftList, loadedSnapshot]);
 
   // Import/Export handlers
   const handleExport = useCallback(() => {
-    const json = exportProfiles();
+    let json: string;
+    try { json = exportProfiles(); } catch (error) { setActionError((error as Error).message); return; }
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -525,7 +560,7 @@ export default function WeightBalance() {
       setImportText('');
       alert(`Successfully imported ${result.imported} profile(s)`);
     } else {
-      alert(`Import failed: ${result.error}`);
+      setActionError(`Import failed: ${result.error}`);
     }
   }, [importText]);
 
@@ -534,6 +569,12 @@ export default function WeightBalance() {
     () => computeWeightBalance(aircraft, fuelGallons, stationWeights),
     [aircraft, fuelGallons, stationWeights]
   );
+  const validationErrors = validateLoading(aircraft, fuelGallons, stationWeights.map(station => station.weight));
+  const refreshRecords = () => {
+    const latest = initialRecords();
+    if (!latest.error) { setProfiles(latest.profiles); setCustomAircraftList(latest.aircraft); }
+    setStorageError(latest.error);
+  };
 
   return (
     <div className="space-y-6">
@@ -549,6 +590,7 @@ export default function WeightBalance() {
           Results are not a determination that an aircraft is safe to fly.
         </p>
       </aside>
+      {(storageError || preferenceError || actionError) && <div role="alert" className="rounded-lg border border-amber-700 bg-amber-950/40 p-4 text-sm text-amber-100">{storageError} {preferenceError} {actionError}</div>}
       {/* Profile Quick Actions */}
       <div className="av-tools-profile-actions">
         <div>
@@ -571,6 +613,8 @@ export default function WeightBalance() {
           onClick={() => {
             setProfileName('');
             setEditingProfileId(null);
+            setEditingSnapshot(null);
+            setActionError('');
             setShowSaveModal(true);
           }}
           className="flex-1 sm:flex-none justify-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors flex items-center gap-1"
@@ -582,7 +626,7 @@ export default function WeightBalance() {
         </button>
         
         <button
-          onClick={() => setShowManageModal(true)}
+          onClick={() => { refreshRecords(); setActionError(''); setShowManageModal(true); }}
           className="flex-1 sm:flex-none px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
         >
           Manage profiles
@@ -596,13 +640,14 @@ export default function WeightBalance() {
         <label htmlFor="av-tools-wb-0" className="block text-sm font-medium text-slate-400 mb-2">Aircraft Type</label>
         <div className="flex gap-2">
           <select id="av-tools-wb-0"
-            value={selectedAircraft}
+            value={loadedSnapshot ? 'saved-profile-snapshot' : selectedAircraft}
             onChange={(e) => {
               applyAircraftSelection(e.target.value);
               setSelectedProfile('');
             }}
             className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
+            {loadedSnapshot && <option value="saved-profile-snapshot">{loadedSnapshot.name} — saved snapshot</option>}
             <optgroup label="Illustrative templates (unverified)">
               {Object.entries(AIRCRAFT_DATABASE).map(([id, data]) => (
                 <option key={id} value={id}>{data.name} — illustrative</option>
@@ -620,7 +665,7 @@ export default function WeightBalance() {
           </select>
           
           <button
-            onClick={() => setShowCustomAircraftModal(true)}
+            onClick={() => { setActionError(''); setShowCustomAircraftModal(true); }}
             className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
             aria-label="Add custom aircraft"
             title="Add Custom Aircraft"
@@ -635,14 +680,14 @@ export default function WeightBalance() {
       {/* Fuel Input */}
       <div>
         <label htmlFor="av-tools-wb-1" className="block text-sm font-medium text-slate-400 mb-2">
-          Fuel ({fuelGallons} gal = {(fuelGallons * aircraft.fuelWeight).toFixed(0)} lbs)
+          Fuel ({Number.isFinite(fuelGallons) ? fuelGallons : 'Invalid'} gal = {Number.isFinite(fuelGallons * aircraft.fuelWeight) ? (fuelGallons * aircraft.fuelWeight).toFixed(0) : 'Unavailable'} lbs)
         </label>
         <input id="av-tools-wb-1"
           type="range"
           min="0"
           max={aircraft.fuelCapacity}
-          value={fuelGallons}
-          onChange={(e) => setFuelGallons(Number(e.target.value))}
+          value={Number.isFinite(fuelGallons) ? fuelGallons : 0}
+          onChange={(e) => setFuelGallons(e.target.valueAsNumber)}
           className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
         />
         <div className="flex justify-between text-xs text-slate-500 mt-1">
@@ -660,8 +705,8 @@ export default function WeightBalance() {
             <label htmlFor={`av-tools-payload-${index}`} className="text-sm text-slate-300 flex-1">{station.name} (lbs)</label>
             <input id={`av-tools-payload-${index}`}
               type="number"
-              value={stationWeights[index]?.weight || 0}
-              onChange={(e) => updateStationWeight(index, Number(e.target.value))}
+              value={Number.isFinite(stationWeights[index]?.weight) ? stationWeights[index].weight : ''}
+              onChange={(e) => updateStationWeight(index, e.target.valueAsNumber)}
               className="w-24 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-right"
               min="0"
               max={station.maxWeight}
@@ -673,6 +718,12 @@ export default function WeightBalance() {
 
       </div>
 
+      {validationErrors.length > 0 && <div role="alert" className="rounded-lg border border-red-700 bg-red-950/40 p-4 text-sm text-red-200">
+        <h3 className="font-semibold">Invalid loading — results unavailable</h3>
+        <ul className="list-disc pl-5">{validationErrors.map(error => <li key={error}>{error}</li>)}</ul>
+        <p>Correct these inputs before saving a profile or using the results.</p>
+      </div>}
+      {loadedSnapshot && <p className="text-sm text-amber-100">Using the saved profile’s aircraft snapshot, not the current custom-aircraft library definition. Reselect an aircraft type to use library data.</p>}
       {/* Results */}
       {calculations && (
         <div className="space-y-4">
@@ -737,7 +788,7 @@ export default function WeightBalance() {
                   {calculations.cg.toFixed(2)} in
                 </p>
                 <p className="text-xs text-slate-500">
-                  Limits: {calculations.cgMin.toFixed(1)} in to {calculations.cgMax.toFixed(1)} in
+                  {calculations.withinEnvelopeWeight ? `Limits: ${calculations.cgMin.toFixed(1)} in to ${calculations.cgMax.toFixed(1)} in` : 'Weight outside entered envelope — CG limits unavailable'}
                 </p>
               </div>
               <div className="text-right">
@@ -788,10 +839,17 @@ export default function WeightBalance() {
             />
           </div>
           
+          {actionError && <p role="alert" className="text-sm text-red-300">{actionError}</p>}
           <div className="text-sm text-slate-400 space-y-1">
-            <p><strong>Aircraft:</strong> {aircraft.name}</p>
-            <p><strong>Fuel:</strong> {fuelGallons} gallons</p>
-            <p><strong>Total Weight:</strong> {calculations?.totalWeight.toFixed(0)} lbs</p>
+            {editingSnapshot ? <>
+              <p>Rename only: the original aircraft snapshot, fuel and payload will be preserved. To save different loading, load the profile, change inputs, then choose Save profile to create a separate record.</p>
+              <p><strong>Aircraft:</strong> {editingSnapshot.customAircraft?.name ?? AIRCRAFT_DATABASE[editingSnapshot.aircraftType]?.name ?? editingSnapshot.aircraftType}</p>
+              <p><strong>Fuel:</strong> {editingSnapshot.fuelGallons} gallons</p>
+            </> : <>
+              <p><strong>Aircraft:</strong> {aircraft.name}</p>
+              <p><strong>Fuel:</strong> {Number.isFinite(fuelGallons) ? fuelGallons : 'Invalid'} gallons</p>
+              <p><strong>Total Weight:</strong> {calculations?.totalWeight.toFixed(0) ?? 'Unavailable'} lbs</p>
+            </>}
           </div>
           
           <div className="flex gap-2 pt-2">
@@ -823,6 +881,7 @@ export default function WeightBalance() {
         title="Manage Profiles"
       >
         <div className="space-y-4">
+          {(actionError || storageError) && <p role="alert" className="text-sm text-red-300">{actionError || storageError}</p>}
           {profiles.length === 0 ? (
             <p className="text-slate-400 text-center py-8">No saved profiles yet</p>
           ) : (
@@ -899,6 +958,7 @@ export default function WeightBalance() {
         title="Import/Export Profiles"
       >
         <div className="space-y-4">
+          {actionError && <p role="alert" className="text-sm text-red-300">{actionError}</p>}
           <div>
             <button
               onClick={handleExport}
@@ -937,6 +997,7 @@ export default function WeightBalance() {
         title="Add Custom Aircraft"
       >
         <div className="space-y-4">
+          {actionError && <p role="alert" className="text-sm text-red-300">{actionError}</p>}
           <div>
             <label htmlFor="av-tools-wb-5" className="block text-sm font-medium text-slate-400 mb-1">Aircraft Name</label>
             <input id="av-tools-wb-5"
@@ -953,8 +1014,8 @@ export default function WeightBalance() {
               <label htmlFor="av-tools-wb-6" className="block text-xs font-medium text-slate-400 mb-1">Empty Weight (lbs)</label>
               <input id="av-tools-wb-6"
                 type="number"
-                value={customAircraftForm.emptyWeight}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyWeight: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.emptyWeight) ? customAircraftForm.emptyWeight : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyWeight: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -963,8 +1024,8 @@ export default function WeightBalance() {
               <input id="av-tools-wb-7"
                 type="number"
                 step="0.1"
-                value={customAircraftForm.emptyArm}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyArm: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.emptyArm) ? customAircraftForm.emptyArm : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyArm: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -972,8 +1033,8 @@ export default function WeightBalance() {
               <label htmlFor="av-tools-wb-8" className="block text-xs font-medium text-slate-400 mb-1">Max Gross (lbs)</label>
               <input id="av-tools-wb-8"
                 type="number"
-                value={customAircraftForm.maxGross}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, maxGross: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.maxGross) ? customAircraftForm.maxGross : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, maxGross: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -981,8 +1042,8 @@ export default function WeightBalance() {
               <label htmlFor="av-tools-wb-9" className="block text-xs font-medium text-slate-400 mb-1">Fuel Capacity (gal)</label>
               <input id="av-tools-wb-9"
                 type="number"
-                value={customAircraftForm.fuelCapacity}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelCapacity: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.fuelCapacity) ? customAircraftForm.fuelCapacity : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelCapacity: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -991,8 +1052,8 @@ export default function WeightBalance() {
               <input id="av-tools-wb-10"
                 type="number"
                 step="0.1"
-                value={customAircraftForm.fuelArm}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelArm: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.fuelArm) ? customAircraftForm.fuelArm : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelArm: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -1001,8 +1062,8 @@ export default function WeightBalance() {
               <input id="av-tools-wb-11"
                 type="number"
                 step="0.1"
-                value={customAircraftForm.fuelWeight}
-                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelWeight: Number(e.target.value) })}
+                value={Number.isFinite(customAircraftForm.fuelWeight) ? customAircraftForm.fuelWeight : ''}
+                onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelWeight: e.target.valueAsNumber })}
                 className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm"
               />
             </div>
@@ -1039,10 +1100,10 @@ export default function WeightBalance() {
                   <input aria-label={`Station ${i + 1} arm (inches)`}
                     type="number"
                     step="0.1"
-                    value={station.arm}
+                    value={Number.isFinite(station.arm) ? station.arm : ''}
                     onChange={(e) => {
                       const newStations = [...customAircraftForm.stations];
-                      newStations[i] = { ...newStations[i], arm: Number(e.target.value) };
+                      newStations[i] = { ...newStations[i], arm: e.target.valueAsNumber };
                       setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
                     }}
                     className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
@@ -1050,10 +1111,10 @@ export default function WeightBalance() {
                   />
                   <input aria-label={`Station ${i + 1} maximum weight (lbs)`}
                     type="number"
-                    value={station.maxWeight || 200}
+                    value={Number.isFinite(station.maxWeight) ? station.maxWeight : ''}
                     onChange={(e) => {
                       const newStations = [...customAircraftForm.stations];
-                      newStations[i] = { ...newStations[i], maxWeight: Number(e.target.value) };
+                      newStations[i] = { ...newStations[i], maxWeight: e.target.valueAsNumber };
                       setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
                     }}
                     className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
@@ -1085,10 +1146,10 @@ export default function WeightBalance() {
                 <div key={i} className="av-tools-envelope-row flex gap-2 items-center">
                   <input aria-label={`Envelope point ${i + 1} weight (lbs)`}
                     type="number"
-                    value={point.weight}
+                    value={Number.isFinite(point.weight) ? point.weight : ''}
                     onChange={(e) => {
                       const newPoints = [...customAircraftForm.envelope.points];
-                      newPoints[i] = { ...newPoints[i], weight: Number(e.target.value) };
+                      newPoints[i] = { ...newPoints[i], weight: e.target.valueAsNumber };
                       setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
                     }}
                     className="w-20 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
@@ -1098,10 +1159,10 @@ export default function WeightBalance() {
                   <input aria-label={`Envelope point ${i + 1} forward limit (inches)`}
                     type="number"
                     step="0.1"
-                    value={point.cgMin}
+                    value={Number.isFinite(point.cgMin) ? point.cgMin : ''}
                     onChange={(e) => {
                       const newPoints = [...customAircraftForm.envelope.points];
-                      newPoints[i] = { ...newPoints[i], cgMin: Number(e.target.value) };
+                      newPoints[i] = { ...newPoints[i], cgMin: e.target.valueAsNumber };
                       setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
                     }}
                     className="w-14 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
@@ -1111,10 +1172,10 @@ export default function WeightBalance() {
                   <input aria-label={`Envelope point ${i + 1} aft limit (inches)`}
                     type="number"
                     step="0.1"
-                    value={point.cgMax}
+                    value={Number.isFinite(point.cgMax) ? point.cgMax : ''}
                     onChange={(e) => {
                       const newPoints = [...customAircraftForm.envelope.points];
-                      newPoints[i] = { ...newPoints[i], cgMax: Number(e.target.value) };
+                      newPoints[i] = { ...newPoints[i], cgMax: e.target.valueAsNumber };
                       setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });
                     }}
                     className="w-14 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"

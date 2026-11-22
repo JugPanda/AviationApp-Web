@@ -5,21 +5,7 @@ import { Polygon, Popup, useMap } from 'react-leaflet';
 
 import MapLayerNotice from '@/components/MapLayerNotice';
 import { isOverlayResponse } from '@/lib/overlay-response';
-
-interface SigmetData {
-  id: string;
-  type: 'SIGMET' | 'AIRMET';
-  subType: string;
-  hazard: string;
-  severity?: string;
-  validFrom: string;
-  validTo: string;
-  altitudeLow?: number;
-  altitudeHigh?: number;
-  rawText: string;
-  coords: { lat: number; lng: number }[];
-  isActive: boolean;
-}
+import { isRenderableSigmet, type SigmetData } from '@/lib/sigmet-normalize';
 
 interface SigmetLayerProps {
   visible: boolean;
@@ -91,15 +77,17 @@ export default function SigmetLayer({ visible }: SigmetLayerProps) {
         const response = await fetch('/api/sigmet?type=all');
         const data = await response.json();
 
-        if (isOverlayResponse<SigmetData>(data)) {
-          setSigmets(data.items.filter((sigmet) => sigmet.coords.length >= 3 && sigmet.isActive));
-          setNotice(data.status === 'unavailable' ? data.message ?? 'Live SIGMET/AIRMET data is unavailable right now.' : null);
-          return;
-        }
-
-        if (Array.isArray(data)) {
-          setSigmets(data.filter((sigmet: SigmetData) => sigmet.coords.length >= 3 && sigmet.isActive));
-          setNotice(null);
+        const envelope = isOverlayResponse<unknown>(data) ? data : null;
+        const items: unknown[] | null = envelope ? envelope.items : Array.isArray(data) && response.ok ? data : null;
+        if (items && (!envelope || envelope.status === 'live' || envelope.status === 'unavailable')) {
+          const valid = items.filter(isRenderableSigmet);
+          const now = Date.now();
+          setSigmets(valid.filter(sigmet => Date.parse(sigmet.validFrom) <= now && now < Date.parse(sigmet.validTo)));
+          const invalidNotice = valid.length !== items.length
+            ? 'SIGMET/AIRMET coverage is incomplete: invalid reports were omitted. Cross-check with an official briefing source.' : null;
+          const providerNotice = envelope?.message || (envelope?.status === 'unavailable' || !response.ok
+            ? 'Live SIGMET/AIRMET data is unavailable right now. Cross-check with an official briefing source.' : null);
+          setNotice([invalidNotice, providerNotice].filter(Boolean).join(' ') || null);
           return;
         }
 
@@ -121,7 +109,7 @@ export default function SigmetLayer({ visible }: SigmetLayerProps) {
 
   return (
     <>
-      <MapLayerNotice message={notice} position="top-right" tone="amber" />
+      <MapLayerNotice message={notice} title="SIGMET coverage" position="top-right" tone="amber" />
       {sigmets.map((sigmet) => {
         const style = getSigmetStyle(sigmet);
         const positions = sigmet.coords.map((coord) => [coord.lat, coord.lng] as [number, number]);

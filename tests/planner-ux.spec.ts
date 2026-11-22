@@ -84,7 +84,7 @@ test('named plans persist after reload, load all existing fields, and delete loc
   expect(saved).toHaveLength(1);
   expect(saved[0]).toMatchObject({ name: planName, departure: 'KLOU', destination: 'KLEX', aircraftTas: 120, fuelBurnRate: 10, fuelOnboard: 40, reserveMinutes: 45 });
   expect(saved[0].waypoints[0]).toMatchObject({ name: 'TEST POINT', distance: 50, trueCourse: 90, altitude: 4500, windDirection: 90, windSpeed: 20 });
-  expect(Object.keys(saved[0]).sort()).toEqual(['id', 'name', 'departure', 'destination', 'waypoints', 'aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt'].sort());
+  expect(Object.keys(saved[0]).sort()).toEqual(['id', 'name', 'departure', 'destination', 'waypoints', 'aircraftTas', 'fuelBurnRate', 'fuelOnboard', 'reserveMinutes', 'createdAt', 'schemaVersion', 'date', 'magneticVariation'].sort());
 
   await page.reload();
   await page.getByRole('button', { name: 'Load plan', exact: true }).click();
@@ -93,7 +93,7 @@ test('named plans persist after reload, load all existing fields, and delete loc
     await expect(page.getByLabel(label, { exact: true })).toHaveValue(value);
   }
   await expect(metric(page.locator('.av-plan-review'), 'Fuel required')).toHaveText('12.5 gal');
-  await expect(page.getByRole('status')).toContainText('not stored with plans');
+  await expect(page.getByRole('status')).toContainText('not stored or is unset');
   await page.getByRole('button', { name: 'Load plan', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: `Delete ${planName}`, exact: true }).click();

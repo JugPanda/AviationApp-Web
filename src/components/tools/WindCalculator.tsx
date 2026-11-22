@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { solveWindTriangle } from '@/lib/wind-triangle';
 
 export default function WindCalculator() {
   const [trueCourse, setTrueCourse] = useState<string>('360');
@@ -8,50 +9,10 @@ export default function WindCalculator() {
   const [windDirection, setWindDirection] = useState<string>('270');
   const [windSpeed, setWindSpeed] = useState<string>('15');
 
-  const result = useMemo(() => {
-    const tc = parseFloat(trueCourse) || 0;
-    const tas = parseFloat(trueAirspeed) || 0;
-    const wd = parseFloat(windDirection) || 0;
-    const ws = parseFloat(windSpeed) || 0;
-
-    if (tas <= 0) return null;
-
-    // Convert to radians
-    const tcRad = (tc * Math.PI) / 180;
-    const wdRad = (wd * Math.PI) / 180;
-
-    // Wind components relative to course
-    // Wind is "from" direction, so we need to reverse it
-    const windFromRad = wdRad;
-    
-    // Calculate wind correction angle
-    // sin(WCA) = (Wind Speed * sin(Wind Direction - True Course)) / TAS
-    const angleFromCourse = windFromRad - tcRad;
-    const crosswindComponent = ws * Math.sin(angleFromCourse);
-    const headwindComponent = ws * Math.cos(angleFromCourse);
-
-    const wcaRad = Math.asin(Math.max(-1, Math.min(1, crosswindComponent / tas)));
-    const wca = (wcaRad * 180) / Math.PI;
-
-    // True heading = True Course + WCA
-    let th = tc + wca;
-    if (th < 0) th += 360;
-    if (th >= 360) th -= 360;
-
-    // Ground speed calculation
-    // GS = TAS * cos(WCA) - headwind component
-    const gs = tas * Math.cos(wcaRad) - headwindComponent;
-
-    return {
-      trueHeading: th,
-      windCorrectionAngle: wca,
-      groundSpeed: Math.max(0, gs),
-      crosswindComponent: Math.abs(crosswindComponent),
-      crosswindDirection: crosswindComponent > 0 ? 'left' : 'right',
-      headwindComponent: headwindComponent,
-      isHeadwind: headwindComponent > 0
-    };
-  }, [trueCourse, trueAirspeed, windDirection, windSpeed]);
+  const solution = useMemo(() => solveWindTriangle(
+    parseFloat(trueCourse), parseFloat(trueAirspeed), parseFloat(windDirection), parseFloat(windSpeed),
+  ), [trueCourse, trueAirspeed, windDirection, windSpeed]);
+  const result = solution.ok ? solution : null;
 
   // Wind triangle SVG visualization
   const renderWindTriangle = () => {
@@ -61,20 +22,15 @@ export default function WindCalculator() {
     const centerY = 120;
     const scale = 0.8;
     const tas = parseFloat(trueAirspeed) || 100;
-    const ws = parseFloat(windSpeed) || 15;
-    const tc = parseFloat(trueCourse) || 0;
-    const wd = parseFloat(windDirection) || 0;
 
     // Normalize for display
     const maxLen = 80;
     const tasLen = maxLen;
-    const wsLen = (ws / tas) * maxLen * 2;
     const gsLen = (result.groundSpeed / tas) * maxLen;
 
     // Convert angles (0° = up, clockwise positive)
-    const tcAngle = ((tc - 90) * Math.PI) / 180;
+    const tcAngle = ((parseFloat(trueCourse) - 90) * Math.PI) / 180;
     const thAngle = ((result.trueHeading - 90) * Math.PI) / 180;
-    const wdAngle = ((wd + 180 - 90) * Math.PI) / 180; // Wind TO direction
 
     // Course line (where we want to go)
     const courseEndX = centerX + Math.cos(tcAngle) * gsLen * scale;
@@ -84,9 +40,9 @@ export default function WindCalculator() {
     const headingEndX = centerX + Math.cos(thAngle) * tasLen * scale;
     const headingEndY = centerY + Math.sin(thAngle) * tasLen * scale;
 
-    // Wind line (from course end back to heading end)
-    const windStartX = courseEndX;
-    const windStartY = courseEndY;
+    // Heading/TAS + wind TO vector = course/GS vector.
+    const windStartX = headingEndX;
+    const windStartY = headingEndY;
 
     return (
       <svg viewBox="0 0 300 240" className="w-full max-w-xs mx-auto">
@@ -122,12 +78,12 @@ export default function WindCalculator() {
           markerEnd="url(#arrowBlue)"
         />
 
-        {/* Wind line (red - from course to heading) */}
+        {/* Wind line (red - from heading to course) */}
         <line
           x1={windStartX}
           y1={windStartY}
-          x2={headingEndX}
-          y2={headingEndY}
+          x2={courseEndX}
+          y2={courseEndY}
           stroke="#ef4444"
           strokeWidth="2"
           markerEnd="url(#arrowRed)"
@@ -222,6 +178,7 @@ export default function WindCalculator() {
       </div>
 
       {/* Results */}
+      {!solution.ok && <p role="alert" className="bg-amber-900/30 border border-amber-700 rounded-lg p-4">{solution.error} Heading and groundspeed withheld.</p>}
       {result && (
         <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
           <div className="grid grid-cols-2 gap-4">
@@ -260,8 +217,8 @@ export default function WindCalculator() {
 
       {/* Tips */}
       <div className="text-center text-xs text-slate-500 border-t border-slate-700 pt-4">
-        <p>Wind from left → correct right (positive WCA)</p>
-        <p>Wind from right → correct left (negative WCA)</p>
+        <p>Wind from left → correct left (negative WCA)</p>
+        <p>Wind from right → correct right (positive WCA)</p>
       </div>
     </div>
   );

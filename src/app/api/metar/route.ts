@@ -52,7 +52,12 @@ export async function GET(request: NextRequest) {
       throw new Error(`AWC API error: ${response.status}`);
     }
 
+    if (response.status === 204) return NextResponse.json([]);
     const data = await response.json();
+    if (!Array.isArray(data) || data.some(airport => !airport || typeof airport !== 'object' ||
+      typeof airport.icaoId !== 'string' || !airport.icaoId.trim())) {
+      throw new Error('Malformed METAR feed');
+    }
     
     // Filter to only US airports if using bbox (might include Canadian/Mexican airports near borders)
     // US ICAO codes start with K, P (Pacific), or are in territories
