@@ -52,13 +52,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AV Weather",
     description:
-      "A clearer view before you fly. Explore the pilot-built browser workspace.",
+      "Your preflight workspace. On the device you have. Explore the pilot-built browser preview.",
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "AV Weather — A clearer view before you fly",
+        alt: "AV Weather — Your preflight workspace",
       },
     ],
     type: "website",

@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-export const alt = "AV Weather — A clearer view before you fly";
+export const alt = "AV Weather — Your preflight workspace";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export default function Image() {
@@ -34,13 +34,13 @@ export default function Image() {
           style={{
             display: "flex",
             flexDirection: "column",
-            fontSize: 80,
+            fontSize: 64,
             letterSpacing: -4,
             lineHeight: 1.12,
           }}
         >
-          <span>Your next flight.</span>
-          <span style={{ color: "#a4c9d5" }}>A clearer view.</span>
+          <span>Your preflight workspace.</span>
+          <span style={{ color: "#a4c9d5" }}>On the device you have.</span>
         </div>
         <div
           style={{

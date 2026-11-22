@@ -50,17 +50,26 @@ for (const width of [360, 768, 1440]) {
         expect(axe.violations).toEqual([]);
       }
       if (route === "/") {
-        const image = page.locator(width < 761 ? ".phone-screen img" : ".product-frame img");
+        const image = page.locator(".phone-screen img");
         await expect(page.locator(".phone-mockup")).toBeVisible();
-        await expect(page.locator(".desktop-device")).toBeVisible({ visible: width > 760 });
+        await expect(
+          page.getByRole("tab", { name: "Weather", exact: true }),
+        ).toBeVisible();
         await image.scrollIntoViewIfNeeded();
         await image.evaluate((i: HTMLImageElement) => i.decode());
         if (width === 360) {
           const dimensions = await image.evaluate((i: HTMLImageElement) => ({
-            width: i.naturalWidth, height: i.naturalHeight,
+            width: i.naturalWidth,
+            height: i.naturalHeight,
             ratio: getComputedStyle(i).aspectRatio,
           }));
-          expect(dimensions.width).toBeGreaterThanOrEqual(1080);
+          // Responsive srcset reports density-corrected naturalWidth, not raw pixels.
+          const sourceWidth = Number(
+            new URL(
+              await image.evaluate((i: HTMLImageElement) => i.currentSrc),
+            ).searchParams.get("w"),
+          );
+          expect(sourceWidth).toBeGreaterThanOrEqual(306);
           expect(dimensions.ratio).toBe("390 / 844");
         }
         await page.evaluate(() => scrollTo(0, 0));
@@ -79,6 +88,28 @@ for (const width of [360, 768, 1440]) {
   }
 }
 
+test("phone preview retains high-resolution imagery on a 3x mobile display", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/");
+    const image = page.locator(".phone-screen img");
+    await image.evaluate((i: HTMLImageElement) => i.decode());
+    const source = await image.evaluate((i: HTMLImageElement) => i.currentSrc);
+    expect(
+      Number(new URL(source).searchParams.get("w")),
+    ).toBeGreaterThanOrEqual(1080);
+    await page.screenshot({ path: path.join(output, "390-3x-hero.png") });
+  } finally {
+    await context.close();
+  }
+});
+
 test("landing CTAs enter workspace and return; FAQ works by keyboard", async ({
   page,
 }) => {
@@ -92,11 +123,12 @@ test("landing CTAs enter workspace and return; FAQ works by keyboard", async ({
     page.getByText("Not yet. Plans, aircraft profiles", { exact: false }),
   ).toBeVisible();
   await page
-    .getByRole("link", { name: "Explore the workspace", exact: false })
+    .getByRole("link", { name: "Check airport weather", exact: false })
+    .first()
     .click();
   await expect(page).toHaveURL(/\/map$/);
   await page.getByRole("link", { name: "AV Weather — back to home" }).click();
-  await expect(page.locator("h1")).toContainText("Your next flight.");
+  await expect(page.locator("h1")).toContainText("Your preflight workspace.");
 });
 
 test("no-JS landing retains all content, disclosure and navigation", async ({
@@ -210,22 +242,36 @@ test("service worker updates safely and never serves stale operational data offl
   await context.close();
 });
 
-test("installed v2 worker upgrades to v3 without losing local records", async ({ browser, baseURL }) => {
+test("installed v2 worker upgrades to v3 without losing local records", async ({
+  browser,
+  baseURL,
+}) => {
   // Isolated loopback origin: real predecessor worker, test-only cache records.
   // All application responses come from the candidate server; no live user data.
-  const previousWorker = execFileSync("git", ["show", "540eaf2862dfac00e2508db1d7ccfe6221627d8c:public/sw.js"], { encoding: "utf8" });
+  const previousWorker = execFileSync(
+    "git",
+    ["show", "540eaf2862dfac00e2508db1d7ccfe6221627d8c:public/sw.js"],
+    { encoding: "utf8" },
+  );
   let usePrevious = true;
   const server = http.createServer(async (req, res) => {
     try {
       if (req.url === "/sw.js" && usePrevious) {
-        res.writeHead(200, { "Content-Type": "application/javascript", "Cache-Control": "no-store" });
+        res.writeHead(200, {
+          "Content-Type": "application/javascript",
+          "Cache-Control": "no-store",
+        });
         res.end(previousWorker);
         return;
       }
       const upstream = await fetch(new URL(req.url || "/", baseURL!), {
         headers: { Accept: req.headers.accept || "*/*" },
       });
-      res.writeHead(upstream.status, { "Content-Type": upstream.headers.get("content-type") || "application/octet-stream", "Cache-Control": "no-store" });
+      res.writeHead(upstream.status, {
+        "Content-Type":
+          upstream.headers.get("content-type") || "application/octet-stream",
+        "Cache-Control": "no-store",
+      });
       res.end(Buffer.from(await upstream.arrayBuffer()));
     } catch {
       res.writeHead(502);
@@ -240,26 +286,57 @@ test("installed v2 worker upgrades to v3 without losing local records", async ({
     const page = await context.newPage();
     await page.goto(origin);
     await page.evaluate(() => navigator.serviceWorker.ready);
-    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
-    await expect.poll(() => page.evaluate(() => caches.keys())).toContain("avweather-shell-v2");
+    await expect
+      .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+      .toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => caches.keys()))
+      .toContain("avweather-shell-v2");
     await page.evaluate(async () => {
-      localStorage.setItem("avweather-flightplans", JSON.stringify([{ id: "upgrade-test", name: "Upgrade preservation test" }]));
-      await (await caches.open("avweather-api-v2")).put("/api/metar?ids=KLOU", new Response(JSON.stringify({ fixture: "stale-test-only" })));
+      localStorage.setItem(
+        "avweather-flightplans",
+        JSON.stringify([
+          { id: "upgrade-test", name: "Upgrade preservation test" },
+        ]),
+      );
+      await (
+        await caches.open("avweather-api-v2")
+      ).put(
+        "/api/metar?ids=KLOU",
+        new Response(JSON.stringify({ fixture: "stale-test-only" })),
+      );
       await caches.open("unrelated-origin-cache");
     });
     usePrevious = false;
-    await page.evaluate(async () => { await (await navigator.serviceWorker.getRegistration())!.update(); });
-    await expect.poll(() => page.evaluate(() => caches.keys())).toEqual(expect.arrayContaining(["avweather-shell-v3", "unrelated-origin-cache"]));
+    await page.evaluate(async () => {
+      await (await navigator.serviceWorker.getRegistration())!.update();
+    });
+    await expect
+      .poll(() => page.evaluate(() => caches.keys()))
+      .toEqual(
+        expect.arrayContaining([
+          "avweather-shell-v3",
+          "unrelated-origin-cache",
+        ]),
+      );
     // The new shell cache is created during install; cleanup completes on activation.
-    await expect.poll(() => page.evaluate(() => caches.keys())).not.toContain("avweather-shell-v2");
-    await expect.poll(() => page.evaluate(() => caches.keys())).not.toContain("avweather-api-v2");
-    expect(await page.evaluate(() => localStorage.getItem("avweather-flightplans"))).toContain("Upgrade preservation test");
+    await expect
+      .poll(() => page.evaluate(() => caches.keys()))
+      .not.toContain("avweather-shell-v2");
+    await expect
+      .poll(() => page.evaluate(() => caches.keys()))
+      .not.toContain("avweather-api-v2");
+    expect(
+      await page.evaluate(() => localStorage.getItem("avweather-flightplans")),
+    ).toContain("Upgrade preservation test");
     await page.reload();
-    await expect(page.locator("h1")).toContainText("Your next flight.");
+    await expect(page.locator("h1")).toContainText("Your preflight workspace.");
     await page.goto(`${origin}/map`);
     await expect(page.locator(".leaflet-container")).toBeVisible();
     await context.setOffline(true);
-    const status = await page.evaluate(async () => (await fetch("/api/metar?ids=KLOU")).status);
+    const status = await page.evaluate(
+      async () => (await fetch("/api/metar?ids=KLOU")).status,
+    );
     expect(status).toBe(503);
   } finally {
     await context.close();
@@ -273,7 +350,7 @@ test("metadata, social image, sitemap and installed-app entry are coherent", asy
   page,
 }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle(/AV Weather.*clearer view/);
+  await expect(page).toHaveTitle(/AV Weather.*Your preflight workspace/);
   expect(
     new URL((await page.locator('link[rel="canonical"]').getAttribute("href"))!)
       .href,

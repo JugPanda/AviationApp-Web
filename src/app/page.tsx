@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "./landing.css";
+import ProductShowcase, {
+  type ShowcaseItem,
+} from "@/components/ProductShowcase";
 
 export const metadata: Metadata = {
-  title: { absolute: "AV Weather — A clearer view before you fly" },
+  title: { absolute: "AV Weather — Your preflight workspace" },
   description:
     "A pilot-built aviation weather and planning workspace for your browser. Explore airport weather, a route planner, pilot tools and a local logbook. Public preview.",
   alternates: { canonical: "/" },
@@ -37,6 +40,61 @@ const questions = [
   ],
 ];
 
+const showcase: ShowcaseItem[] = [
+  {
+    id: "weather",
+    label: "Weather",
+    title: "Start with the airport, not a wall of data.",
+    description:
+      "Search an ICAO code, open the airport report, and read the observation time alongside the conditions. Keep the wider map in view.",
+    src: "/images/showcase-weather.webp",
+    width: 1280,
+    height: 800,
+    mobileSrc: "/images/showcase-weather-mobile.webp",
+    mobileWidth: 390,
+    mobileHeight: 558,
+    alt: "Actual AV Weather airport report; the desktop capture also shows the FAA map. Historical capture, not current flight information.",
+    href: "/map",
+    cta: "Check airport weather",
+    note: "Captured interface, not live weather. Map imagery: FAA. Check freshness in the workspace.",
+  },
+  {
+    id: "planning",
+    label: "Planning",
+    title: "Work through a route, one leg at a time.",
+    description:
+      "Enter waypoints and your own verified performance inputs. Review the navlog, then save the plan in this browser or open the print view.",
+    src: "/images/showcase-planning.webp",
+    width: 1280,
+    height: 800,
+    mobileSrc: "/images/showcase-planning-mobile.webp",
+    mobileWidth: 358,
+    mobileHeight: 484,
+    alt: "Actual AV Weather planner showing an illustrative route and navlog. Values are demonstration inputs, not a real flight plan.",
+    href: "/plan",
+    cta: "Open the route planner",
+    note: "Illustrative inputs only—not an actual route or aircraft record. Saved plans stay in this browser; no device sync.",
+  },
+  {
+    id: "tools",
+    label: "Pilot tools",
+    title: "See the inputs behind the numbers.",
+    description:
+      "Explore crosswind, fuel, time and other supporting calculators. The crosswind example makes the runway and wind directions visible together.",
+    src: "/images/showcase-tools.webp",
+    width: 1280,
+    height: 800,
+    mobileSrc: "/images/showcase-tools-mobile.webp",
+    mobileWidth: 358,
+    mobileHeight: 424,
+    alt: "Actual crosswind calculator with its illustrative default runway and wind inputs and wind diagram.",
+    href: "/tools",
+    cta: "Explore pilot tools",
+    note: "Illustrative defaults—not current wind or aircraft limits. Verify inputs and results independently; W&B templates are unverified.",
+  },
+];
+const feedbackUrl = "https://github.com/JugPanda/AviationApp-Web/issues/new";
+
 function Arrow() {
   return <span aria-hidden="true">↗</span>;
 }
@@ -48,7 +106,11 @@ export default function LandingPage() {
         Skip to content
       </a>
       <header className="landing-header">
-        <Link href="/" className="landing-brand" aria-label="AV Weather home">
+        <Link
+          href="/"
+          className="landing-brand"
+          aria-label="AV Weather / Preflight, considered. Home"
+        >
           <Image src="/icon-192.png" alt="" width={38} height={38} />
           <span>
             AV Weather<span className="brand-divider"> / </span>
@@ -78,33 +140,46 @@ export default function LandingPage() {
           <div className="hero-grid">
             <div className="hero-copy">
               <h1 id="hero-title">
-                Your next flight.
+                Your preflight workspace.
                 <br />
-                <em>A clearer view.</em>
+                <em>On the device you have.</em>
               </h1>
               <p>
-                Aviation weather, flight planning and pilot tools.
-                <br className="desktop-break" /> One browser workspace. No
-                particular tablet required.
+                Check airport weather, work through a route and open pilot
+                tools.
+                <br className="desktop-break" /> In your browser, without a
+                particular tablet.
               </p>
               <div className="hero-actions">
                 <Link className="landing-button" href="/map">
-                  Explore the workspace <Arrow />
+                  Check airport weather <Arrow />
                 </Link>
-                <a className="landing-text-link" href="#workspace">
-                  Take a closer look <span aria-hidden="true">↓</span>
+                <a className="landing-text-link" href="#walkthrough">
+                  Watch the short tour <span aria-hidden="true">▷</span>
                 </a>
               </div>
               <div className="hero-footnote">
-                <span>Built for the browser</span>
+                <span>No account required</span>
                 <span>Phone · Tablet · Desktop</span>
               </div>
             </div>
             <figure className="hero-device" aria-labelledby="phone-caption">
-              <div className="device-orbit" aria-hidden="true"><span>N</span></div>
-              <Link href="/map" className="phone-mockup" aria-label="Open AV Weather shown in the phone preview">
-                <span className="phone-button phone-button-volume" aria-hidden="true" />
-                <span className="phone-button phone-button-power" aria-hidden="true" />
+              <div className="device-orbit" aria-hidden="true">
+                <span>N</span>
+              </div>
+              <Link
+                href="/map"
+                className="phone-mockup"
+                aria-label="Open AV Weather shown in the phone preview"
+              >
+                <span
+                  className="phone-button phone-button-volume"
+                  aria-hidden="true"
+                />
+                <span
+                  className="phone-button phone-button-power"
+                  aria-hidden="true"
+                />
                 <span className="phone-bezel">
                   <span className="phone-camera" aria-hidden="true" />
                   <span className="phone-screen">
@@ -114,10 +189,13 @@ export default function LandingPage() {
                       width={390}
                       height={844}
                       priority
-                      unoptimized
+                      fetchPriority="high"
+                      sizes="(max-width: 640px) 85vw, 390px"
                     />
                   </span>
-                  <span className="phone-bottom" aria-hidden="true"><i /></span>
+                  <span className="phone-bottom" aria-hidden="true">
+                    <i />
+                  </span>
                 </span>
               </Link>
               <figcaption id="phone-caption">
@@ -126,34 +204,10 @@ export default function LandingPage() {
               </figcaption>
             </figure>
           </div>
-          <figure className="product-frame">
-            <div className="desktop-device">
-              <div className="desktop-device-bezel">
-                <div className="product-frame-bar">
-                  <span><i /><i /><i /></span>
-                  <span>AV WEATHER / WEATHER WORKSPACE</span>
-                  <span>BROWSER PREVIEW</span>
-                </div>
-                <Link href="/map" aria-label="Open the weather workspace shown in this screenshot">
-                  <Image
-                    src="/images/weather-workspace.webp"
-                    alt="Captured AV Weather interface with airport weather and an FAA map. This screenshot is not current flight information."
-                    width={1440}
-                    height={900}
-                    sizes="(max-width: 760px) 100vw, 85vw"
-                  />
-                </Link>
-              </div>
-              <div className="desktop-device-base" aria-hidden="true"><span /></div>
-            </div>
-            <figcaption>
-              Actual preview interface. Captured weather is not current flight
-              information. Map imagery: FAA.{" "}
-              <Link href="/map">
-                Open current workspace <Arrow />
-              </Link>
-            </figcaption>
-          </figure>
+          <p className="hero-capture-note">
+            Actual preview interface in an illustrative device. Captured weather
+            is not current flight information. Map imagery: FAA.
+          </p>
         </section>
 
         <section
@@ -167,67 +221,17 @@ export default function LandingPage() {
           </div>
           <div className="section-heading">
             <h2 id="workspace-title">
-              Less switching.
+              A closer look at
               <br />
-              More perspective.
+              what you can do.
             </h2>
             <p>
-              Start with the weather. Work through the plan. Keep the useful
-              tools close. The essentials are together, without pretending every
-              feature is finished.
+              Three useful places to start. Explore each part of the current
+              preview—without assuming your data automatically moves between
+              them.
             </p>
           </div>
-          <div className="feature-grid">
-            <Link className="feature-card feature-weather" href="/map">
-              <span className="feature-index">01 / OBSERVE</span>
-              <div className="weather-symbol" aria-hidden="true">
-                <span>VFR</span>
-                <span>MVFR</span>
-                <span>IFR</span>
-                <span>LIFR</span>
-              </div>
-              <h3>See the weather picture.</h3>
-              <p>
-                Search an airport, read its METAR and forecast, and explore
-                weather categories on the map.
-              </p>
-              <span className="feature-link">
-                Weather map <Arrow />
-              </span>
-            </Link>
-            <Link className="feature-card" href="/plan">
-              <span className="feature-index">02 / PREPARE</span>
-              <div className="route-symbol" aria-hidden="true">
-                <i />
-                <span />
-                <i />
-                <span />
-                <i />
-              </div>
-              <h3>Give the trip a plan.</h3>
-              <p>
-                Build a route and navlog, work through time and fuel estimates,
-                and save the plan in this browser.
-              </p>
-              <span className="feature-link">
-                Flight planner <Arrow />
-              </span>
-            </Link>
-            <Link className="feature-card" href="/tools">
-              <span className="feature-index">03 / WORK IT THROUGH</span>
-              <div className="tools-symbol" aria-hidden="true">
-                W<span>+</span>B<span className="tools-rule" />
-              </div>
-              <h3>Keep the numbers in view.</h3>
-              <p>
-                Explore weight and balance, crosswind, fuel and other pilot
-                calculators. Verify inputs and results independently.
-              </p>
-              <span className="feature-link">
-                Pilot tools <Arrow />
-              </span>
-            </Link>
-          </div>
+          <ProductShowcase items={showcase} />
           <div className="logbook-link">
             <p>
               <strong>A place for the flights, too.</strong> Keep a
@@ -240,32 +244,125 @@ export default function LandingPage() {
         </section>
 
         <section
+          className="walkthrough-section landing-section"
+          id="walkthrough"
+          aria-labelledby="walkthrough-title"
+        >
+          <div className="section-label">
+            <span>02 / SEE IT IN USE</span>
+            <span>A REAL BROWSER RECORDING</span>
+          </div>
+          <div className="section-heading">
+            <h2 id="walkthrough-title">
+              From airport search
+              <br />
+              to the weather picture.
+            </h2>
+            <p>
+              A short look at the actual preview. Press play when you’re ready;
+              pause, replay or use full screen to see the details.
+            </p>
+          </div>
+          <figure className="walkthrough-player">
+            <video
+              controls
+              playsInline
+              preload="none"
+              width="1280"
+              height="864"
+              poster="/images/walkthrough-poster.webp"
+              aria-label="AV Weather airport search walkthrough"
+              aria-describedby="walkthrough-caption"
+            >
+              <source src="/media/airport-walkthrough.mp4" type="video/mp4" />
+              <track
+                kind="captions"
+                src="/media/airport-walkthrough.vtt"
+                srcLang="en"
+                label="English"
+              />
+              Your browser cannot play this recording.{" "}
+              <a href="/media/airport-walkthrough.mp4">
+                Open the walkthrough video
+              </a>{" "}
+              or read the steps below.
+            </video>
+            <figcaption id="walkthrough-caption">
+              Recorded browser preview. Captured weather is not current flight
+              information. Map imagery: FAA.
+            </figcaption>
+          </figure>
+          <ol className="walkthrough-steps">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Search an airport</strong>
+                <p>Enter its four-letter ICAO code. The recording uses KLOU.</p>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Read the report</strong>
+                <p>
+                  Open the airport details and check the observation time with
+                  the conditions.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>Return to the map</strong>
+                <p>Close the report to see the wider weather picture.</p>
+              </div>
+            </li>
+          </ol>
+          <Link href="/map" className="landing-text-link">
+            Try an airport lookup yourself <Arrow />
+          </Link>
+        </section>
+
+        <section
           className="direction-section landing-section"
           id="direction"
           aria-labelledby="direction-title"
         >
           <div className="section-label">
-            <span>02 / BUILT FROM EXPERIENCE</span>
+            <span>03 / BUILT FROM EXPERIENCE</span>
             <span>PILOT-LED. STILL DEVELOPING.</span>
           </div>
           <div className="direction-grid">
             <div>
               <span className="eyebrow">THE IPAD ISN’T ALWAYS WITH YOU.</span>
               <h2 id="direction-title">
-                Your curiosity
+                Your iPad isn’t always
                 <br />
-                shouldn’t stop there.
+                the device at hand.
               </h2>
               <p>
-                AV Weather started with a familiar mismatch: an iPad for
-                ForeFlight, a Samsung phone in your pocket, and a wish for a
-                consistent experience across both.
+                AV Weather began with a pilot’s everyday mismatch: using
+                ForeFlight on an iPad, but sometimes having only a Samsung phone
+                at hand. The goal is a useful browser companion for those
+                moments.
               </p>
               <p>
-                Built by a pilot, it’s taking shape as a cross-platform
-                preflight companion. Not a claim to replace everything you
-                already trust. A useful place to start—and something to help
-                make better.
+                ForeFlight already does a lot well. This is not a promise to
+                replace it. It’s a developing place to check the weather, work
+                through planning tasks and tell us what would make it more
+                useful.
+              </p>
+              <a
+                href={feedbackUrl}
+                className="landing-text-link"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Share feedback on GitHub <Arrow />
+              </a>
+              <p className="feedback-note">
+                A GitHub account is required. Reports are public—please don’t
+                include private flight records, personal details or credentials.
               </p>
             </div>
             <div className="direction-roadmap">
@@ -296,12 +393,55 @@ export default function LandingPage() {
         </section>
 
         <section
+          className="updates-section landing-section"
+          id="updates"
+          aria-labelledby="updates-title"
+        >
+          <div className="section-label">
+            <span>04 / SHIPPED, NOT PROMISED</span>
+            <span>PREVIEW UPDATES</span>
+          </div>
+          <div className="updates-grid">
+            <h2 id="updates-title">
+              Small steps.
+              <br />
+              Real changes.
+            </h2>
+            <ul>
+              <li>
+                <time dateTime="2026-11-21">November 21, 2026</time>
+                <h3>A clearer way into the workspace.</h3>
+                <p>
+                  Unified navigation across Map, Plan, Tools and Logbook,
+                  clearer local-storage notices, and offline handling that
+                  returns unavailable instead of replaying cached API weather.
+                </p>
+                <a href="https://github.com/JugPanda/AviationApp-Web/commit/4158630b7e0ca5dd792cef829908d230636b30cc">
+                  View the shipped change <Arrow />
+                </a>
+              </li>
+              <li>
+                <time dateTime="2026-11-21">November 21, 2026</time>
+                <h3>Real screens. A better first look.</h3>
+                <p>
+                  Phone and laptop previews built around actual AV Weather
+                  captures, with responsive layouts and explicit capture labels.
+                </p>
+                <a href="https://github.com/JugPanda/AviationApp-Web/commit/3311c1c614e7abf8def28b3efa5667b7edd35614">
+                  View the shipped change <Arrow />
+                </a>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section
           className="questions-section landing-section"
           id="questions"
           aria-labelledby="questions-title"
         >
           <div className="section-label">
-            <span>03 / BEFORE YOU OPEN IT</span>
+            <span>05 / BEFORE YOU OPEN IT</span>
             <span>STRAIGHT ANSWERS</span>
           </div>
           <div className="questions-grid">
@@ -327,12 +467,12 @@ export default function LandingPage() {
         <section className="landing-close">
           <span className="eyebrow">START WITH A CLOSER LOOK</span>
           <h2>
-            A clearer view
+            Start with
             <br />
-            starts here.
+            your airport.
           </h2>
           <Link className="landing-button" href="/map">
-            Open the workspace <Arrow />
+            Check airport weather <Arrow />
           </Link>
           <p>Public preview · Supplemental use only · No account required</p>
         </section>
@@ -342,11 +482,14 @@ export default function LandingPage() {
           <Link href="/" className="footer-wordmark">
             AV Weather
           </Link>
-          <p>A pilot-built perspective on preflight.</p>
+          <p>A pilot-built browser workspace for preflight.</p>
         </div>
         <nav aria-label="Footer navigation">
           <Link href="/about">Preview notes</Link>
           <Link href="/privacy">Privacy & data</Link>
+          <a href={feedbackUrl} target="_blank" rel="noopener noreferrer">
+            Feedback on GitHub
+          </a>
           <Link href="/map">
             Open workspace <Arrow />
           </Link>

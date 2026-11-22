@@ -76,7 +76,7 @@ export function calculateCrosswind({
     gustHeadwind: roundedGustHeadwind,
     gustTailwind: roundedGustTailwind,
     isHeadwind,
-    windFromLeft: angleDiff > 0,
+    windFromLeft: angleDiff < 0,
     maxCrosswind,
     effectiveGustSpeed,
     limits,

@@ -207,7 +207,7 @@ export default function CrosswindCalculator() {
             {calculations.crosswind}
           </p>
           <p className="text-xs text-slate-500">
-            knots from {calculations.windFromLeft ? 'left' : 'right'}
+            knots{calculations.crosswind > 0 ? ` from ${calculations.windFromLeft ? 'left' : 'right'}` : ''}
           </p>
           {calculations.effectiveGustSpeed !== null && calculations.gustCrosswind > calculations.crosswind && (
             <p className="text-xs text-orange-400 mt-1">

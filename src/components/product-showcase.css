@@ -1,0 +1,228 @@
+.product-showcase {
+  width: 100%;
+  min-width: 0;
+  color: #f1f0e8;
+  font-family: var(--font-dm), sans-serif;
+}
+
+.product-showcase,
+.product-showcase * {
+  box-sizing: border-box;
+}
+
+.product-showcase-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #c7cbc6;
+  border-radius: 12px;
+  background: #e5e6df;
+}
+
+.product-showcase-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #334651;
+  font: inherit;
+  font-size: clamp(12px, 1.2vw, 15px);
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.product-showcase-tab:hover {
+  background: #d7ddd8;
+  color: #0b1721;
+}
+
+.product-showcase-tab[aria-selected="true"] {
+  border-color: #ffad66;
+  background: #0b1721;
+  color: #ffad66;
+  box-shadow: inset 0 -3px #ffad66;
+}
+
+.product-showcase .product-showcase-tab:focus-visible {
+  outline: 3px solid #805020;
+  outline-offset: 2px;
+}
+
+.product-showcase-panels {
+  display: grid;
+  gap: 32px;
+}
+
+.product-showcase-panel {
+  min-width: 0;
+  border: 1px solid #394b56;
+  border-radius: 16px;
+  background: #0b1721;
+  box-shadow: 0 24px 56px -28px #0b172150;
+}
+
+.product-showcase-panel[hidden] {
+  display: none;
+}
+
+.product-showcase .product-showcase-panel:focus-visible {
+  outline: 3px solid #805020;
+  outline-offset: 5px;
+}
+
+.product-showcase-figure {
+  margin: 0;
+  padding: clamp(8px, 1.4vw, 18px);
+}
+
+.product-showcase-frame {
+  overflow: hidden;
+  border: 1px solid #40515c;
+  border-radius: 9px;
+  background: #14232f;
+}
+
+.product-showcase-chrome {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 38px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #40515c;
+  color: #bdcbd3;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.product-showcase-dots {
+  display: flex;
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.product-showcase-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6b818f;
+}
+
+.product-showcase-frame-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.product-showcase-image-link {
+  display: block;
+  color: #c0ccd3;
+}
+.product-showcase-image-link > span {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  font-size: 11px;
+}
+.product-showcase-image-link:focus-visible {
+  outline: 3px solid #ffad66;
+  outline-offset: -3px;
+}
+.product-showcase-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.product-showcase-caption {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+  padding: clamp(20px, 3vw, 36px) clamp(8px, 1.5vw, 20px) 12px;
+  overflow-wrap: anywhere;
+}
+
+.product-showcase .product-showcase-title {
+  margin: 0;
+  color: #f1f0e8;
+  font-family: var(--font-heading), var(--font-dm), sans-serif;
+  font-size: clamp(23px, 2.6vw, 34px);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.7px;
+}
+
+.product-showcase-description {
+  max-width: 58ch;
+  margin: 14px 0 0;
+  color: #c0ccd3;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.product-showcase-action {
+  justify-self: end;
+  max-width: 36ch;
+}
+
+.product-showcase-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 48px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffad6670;
+  color: #ffad66;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.product-showcase-link:hover {
+  color: #ffca9c;
+  border-color: currentColor;
+}
+
+.product-showcase .product-showcase-link:focus-visible {
+  outline: 3px solid #ffad66;
+  outline-offset: 4px;
+}
+
+.product-showcase-note {
+  margin: 12px 0 0;
+  color: #aebcc5;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .product-showcase-tabs {
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 14px;
+  }
+
+  .product-showcase-tab {
+    padding: 12px 6px;
+  }
+
+  .product-showcase-caption {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .product-showcase-action {
+    justify-self: start;
+    max-width: none;
+  }
+}
