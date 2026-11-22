@@ -127,13 +127,14 @@ export default function CrosswindCalculator() {
   return (
     <div className="space-y-6">
       {/* Inputs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="av-tools-inputs grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
+          <label htmlFor="av-tools-crosswindcalculator-0" className="block text-sm font-medium text-slate-400 mb-2">
             Runway Heading (°)
           </label>
           <div className="flex gap-2">
-            <input
+            <input id="av-tools-crosswindcalculator-0"
               type="number"
               value={runwayHeading}
               onChange={(e) => setRunwayHeading(Math.max(0, Math.min(360, Number(e.target.value))))}
@@ -148,10 +149,10 @@ export default function CrosswindCalculator() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
+          <label htmlFor="av-tools-crosswindcalculator-1" className="block text-sm font-medium text-slate-400 mb-2">
             Wind Direction (°)
           </label>
-          <input
+          <input id="av-tools-crosswindcalculator-1"
             type="number"
             value={windDirection}
             onChange={(e) => setWindDirection(Math.max(0, Math.min(360, Number(e.target.value))))}
@@ -162,10 +163,10 @@ export default function CrosswindCalculator() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
-            Wind Speed (kt)
+          <label htmlFor="av-tools-crosswindcalculator-2" className="block text-sm font-medium text-slate-400 mb-2">
+            Wind Speed (knots)
           </label>
-          <input
+          <input id="av-tools-crosswindcalculator-2"
             type="number"
             value={windSpeed}
             onChange={(e) => setWindSpeed(Math.max(0, Number(e.target.value)))}
@@ -175,10 +176,10 @@ export default function CrosswindCalculator() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
-            Gust Speed (kt, optional)
+          <label htmlFor="av-tools-crosswindcalculator-3" className="block text-sm font-medium text-slate-400 mb-2">
+            Gust Speed (knots, optional)
           </label>
-          <input
+          <input id="av-tools-crosswindcalculator-3"
             type="number"
             value={gustSpeed}
             onChange={(e) => setGustSpeed(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
@@ -200,6 +201,7 @@ export default function CrosswindCalculator() {
       </div>
 
       {/* Results */}
+      <h3 className="av-tools-section-title">Wind components</h3>
       <div className="grid grid-cols-2 gap-4">
         <div className={`rounded-lg p-4 text-center ${calculations.crosswind > 15 ? 'bg-red-900/30 border border-red-700' : 'bg-slate-800/50'}`}>
           <p className="text-sm text-slate-400 mb-1">Crosswind</p>

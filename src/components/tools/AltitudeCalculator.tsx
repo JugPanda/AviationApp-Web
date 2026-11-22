@@ -68,23 +68,19 @@ export default function AltitudeCalculator() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Altitude & Airspeed Calculator</h3>
-        <p className="text-sm text-slate-400">Pressure, density, true altitude & TAS</p>
-      </div>
-
       {/* Mode Selection */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <label className="block text-sm font-medium text-slate-400 mb-3">View</label>
         <div className="grid grid-cols-4 gap-2">
           {[
-            { key: 'pressure', label: 'Press Alt' },
-            { key: 'density', label: 'Dens Alt' },
-            { key: 'true', label: 'True Alt' },
-            { key: 'tas', label: 'TAS' }
+            { key: 'pressure', label: 'Pressure altitude' },
+            { key: 'density', label: 'Density altitude' },
+            { key: 'true', label: 'True altitude' },
+            { key: 'tas', label: 'True airspeed' }
           ].map(({ key, label }) => (
             <button
               key={key}
+              aria-pressed={mode === key}
               onClick={() => setMode(key as CalculationMode)}
               className={`px-2 py-2 rounded-lg text-xs font-medium transition-colors ${
                 mode === key ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -97,10 +93,11 @@ export default function AltitudeCalculator() {
       </div>
 
       {/* Inputs */}
-      <div className="space-y-4">
+      <div className="av-tools-inputs space-y-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Indicated Altitude (ft)</label>
-          <input
+          <label htmlFor="av-tools-altitudecalculator-0" className="block text-sm font-medium text-slate-400 mb-2">Indicated Altitude (ft)</label>
+          <input id="av-tools-altitudecalculator-0"
             type="number"
             value={indicatedAlt}
             onChange={(e) => setIndicatedAlt(e.target.value)}
@@ -110,8 +107,8 @@ export default function AltitudeCalculator() {
         </div>
 
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Altimeter Setting (inHg)</label>
-          <input
+          <label htmlFor="av-tools-altitudecalculator-1" className="block text-sm font-medium text-slate-400 mb-2">Altimeter Setting (inHg)</label>
+          <input id="av-tools-altitudecalculator-1"
             type="number"
             value={altimeterSetting}
             onChange={(e) => setAltimeterSetting(e.target.value)}
@@ -122,9 +119,9 @@ export default function AltitudeCalculator() {
         </div>
 
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Outside Air Temperature</label>
+          <label htmlFor="av-tools-altitudecalculator-2" className="block text-sm font-medium text-slate-400 mb-2">Outside air temperature (°{oatUnit})</label>
           <div className="flex gap-2">
-            <input
+            <input id="av-tools-altitudecalculator-2"
               type="number"
               value={oat}
               onChange={(e) => setOat(e.target.value)}
@@ -133,6 +130,7 @@ export default function AltitudeCalculator() {
             />
             <div className="flex bg-slate-700 rounded-lg overflow-hidden">
               <button
+                aria-pressed={oatUnit === 'C'}
                 onClick={() => setOatUnit('C')}
                 className={`px-4 py-3 text-sm transition-colors ${
                   oatUnit === 'C' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
@@ -141,6 +139,7 @@ export default function AltitudeCalculator() {
                 °C
               </button>
               <button
+                aria-pressed={oatUnit === 'F'}
                 onClick={() => setOatUnit('F')}
                 className={`px-4 py-3 text-sm transition-colors ${
                   oatUnit === 'F' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
@@ -154,8 +153,8 @@ export default function AltitudeCalculator() {
 
         {mode === 'tas' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Calibrated Airspeed (CAS/KIAS)</label>
-            <input
+            <label htmlFor="av-tools-altitudecalculator-3" className="block text-sm font-medium text-slate-400 mb-2">Calibrated airspeed (knots)</label>
+            <input id="av-tools-altitudecalculator-3"
               type="number"
               value={cas}
               onChange={(e) => setCas(e.target.value)}
@@ -267,12 +266,14 @@ export default function AltitudeCalculator() {
         </div>
       )}
 
-      {/* Formula Reference */}
-      <div className="text-center text-xs text-slate-500 border-t border-slate-700 pt-4 space-y-1">
+      <details className="av-tools-reference">
+        <summary>Formula reference</summary>
+        <div className="text-sm text-slate-400 space-y-1">
         <p>PA = IA + ((29.92 - altimeter) × 1000)</p>
         <p>DA = PA + (120 × temp deviation)</p>
         <p>ISA: 15°C at SL, -2°C per 1000ft</p>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

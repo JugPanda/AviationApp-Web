@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import AppShell, { useBrowserReady } from '@/components/AppShell';
+import './logbook.css';
 
 interface FlightEntry {
   id: string;
@@ -53,32 +54,82 @@ interface CurrencyItem {
 
 const STORAGE_KEY = 'avweather-logbook';
 
-function getEntries(): FlightEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+const numericFields = ['totalTime', 'pic', 'sic', 'dual', 'solo', 'crossCountry', 'dayTime', 'nightTime', 'actualInstrument', 'simulatedInstrument', 'dayLandings', 'nightLandings', 'approaches', 'holds', 'createdAt', 'updatedAt'] as const;
+
+// Validate the existing shape without coercing, repairing or migrating records.
+function isFlightEntry(value: unknown): value is FlightEntry {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Record<string, unknown>;
+  return ['id', 'date', 'aircraft', 'aircraftType', 'from', 'to'].every(key => typeof entry[key] === 'string')
+    && typeof entry.id === 'string' && entry.id.length > 0
+    && typeof entry.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && Number.isFinite(Date.parse(entry.date))
+    && numericFields.every(key => typeof entry[key] === 'number' && Number.isFinite(entry[key]))
+    && ['route', 'approachTypes', 'remarks'].every(key => entry[key] === undefined || typeof entry[key] === 'string');
 }
 
-function saveEntries(entries: FlightEntry[]): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+function parseEntries(raw: string): FlightEntry[] {
+  const value: unknown = JSON.parse(raw);
+  if (!Array.isArray(value) || !value.every(isFlightEntry)) throw new Error('Invalid logbook format');
+  if (new Set(value.map(entry => entry.id)).size !== value.length) throw new Error('Duplicate entry IDs');
+  return value;
+}
+
+function loadLogbook(): { entries: FlightEntry[]; raw: string | null; error: string } {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+    return { entries: raw === null ? [] : parseEntries(raw), raw, error: '' };
+  } catch {
+    return {
+      entries: [], raw,
+      error: raw === null
+        ? 'Browser storage could not be read. Saving and importing are paused to protect any existing records. Allow browser storage, then reload.'
+        : 'Your stored logbook could not be opened. It has not been changed. Download the stored data before repairing the file; saving and importing are paused.',
+    };
+  }
 }
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+type Feedback = { kind: 'success' | 'error' | 'info'; text: string } | null;
+
 export default function LogbookPage() {
   const browserReady = useBrowserReady();
-  const [entries, setEntries] = useState<FlightEntry[]>(() => getEntries());
+  return <AppShell>{browserReady ? <LocalLogbook /> : (
+    <main id="workspace-content" tabIndex={-1} className="av-logbook">
+      <h1>Flight logbook</h1><p role="status">Opening your local logbook…</p>
+    </main>
+  )}</AppShell>;
+}
+
+function LocalLogbook() {
+  const [loaded] = useState(loadLogbook);
+  const [entries, setEntries] = useState<FlightEntry[]>(loaded.entries);
+  const storedSnapshot = useRef(loaded.raw);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [importing, setImporting] = useState(false);
   const [view, setView] = useState<'list' | 'add' | 'currency' | 'totals'>('list');
   const [editingEntry, setEditingEntry] = useState<FlightEntry | null>(null);
   const [sortField, setSortField] = useState<'date' | 'totalTime'>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const contentHeading = useRef<HTMLHeadingElement>(null);
+  const focusNextView = useRef(false);
+  const importInput = useRef<HTMLInputElement>(null);
+  const locked = Boolean(loaded.error) || importing;
+
+  useEffect(() => {
+    if (focusNextView.current) {
+      contentHeading.current?.focus();
+      focusNextView.current = false;
+    }
+  }, [view]);
+
+  const changeView = (next: typeof view) => {
+    focusNextView.current = true;
+    setView(next);
+  };
 
 
   const sortedEntries = useMemo(() => {
@@ -177,610 +228,342 @@ export default function LogbookPage() {
     return items;
   }, [entries]);
 
-  const handleSaveEntry = (entry: Omit<FlightEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (editingEntry) {
-      // Update existing
-      const updated = entries.map(e => 
-        e.id === editingEntry.id 
-          ? { ...entry, id: e.id, createdAt: e.createdAt, updatedAt: Date.now() }
-          : e
-      );
+  // Commit to storage before changing the visible records. A failed write keeps
+  // both the saved list and the open draft intact, rather than claiming success.
+  const persist = (updated: FlightEntry[]): boolean => {
+    if (loaded.error) return false;
+    try {
+      if (localStorage.getItem(STORAGE_KEY) !== storedSnapshot.current) {
+        setFeedback({ kind: 'error', text: 'The stored logbook changed in another tab. Nothing was overwritten. Copy any unsaved notes, then reload to see the latest records.' });
+        return false;
+      }
+      const raw = JSON.stringify(updated);
+      localStorage.setItem(STORAGE_KEY, raw);
+      storedSnapshot.current = raw;
       setEntries(updated);
-      saveEntries(updated);
-    } else {
-      // Create new
-      const newEntry: FlightEntry = {
-        ...entry,
-        id: generateId(),
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      };
-      const updated = [...entries, newEntry];
-      setEntries(updated);
-      saveEntries(updated);
+      return true;
+    } catch {
+      setFeedback({ kind: 'error', text: 'Could not save to this browser. Your saved records are unchanged and any open draft is still here. Check available storage or browser permissions, then try again. Export a backup of saved records before clearing data.' });
+      return false;
     }
-    setEditingEntry(null);
-    setView('list');
   };
 
-  const handleDeleteEntry = (id: string) => {
-    if (!confirm('Delete this flight entry?')) return;
-    const updated = entries.filter(e => e.id !== id);
-    setEntries(updated);
-    saveEntries(updated);
+  const handleSaveEntry = (entry: Omit<FlightEntry, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const updated = editingEntry
+      ? entries.map(e => e.id === editingEntry.id ? { ...e, ...entry, updatedAt: Date.now() } : e)
+      : [...entries, { ...entry, id: generateId(), createdAt: Date.now(), updatedAt: Date.now() }];
+    if (!persist(updated)) return;
+    setFeedback({ kind: 'success', text: editingEntry ? 'Flight updated in this browser.' : 'Flight saved in this browser.' });
+    setEditingEntry(null);
+    changeView('list');
+  };
+
+  const handleDeleteEntry = (entry: FlightEntry) => {
+    if (!confirm(`Delete the flight on ${entry.date}, ${entry.from} → ${entry.to}? This cannot be undone. Export a backup first if you need a copy.`)) {
+      setFeedback({ kind: 'info', text: 'Deletion canceled. Your flight is unchanged.' });
+      return;
+    }
+    if (persist(entries.filter(e => e.id !== entry.id))) {
+      setFeedback({ kind: 'success', text: 'Flight deleted from this browser.' });
+      contentHeading.current?.focus();
+    }
   };
 
   const handleExport = () => {
-    const json = JSON.stringify(entries, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logbook-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const json = loaded.error ? loaded.raw : JSON.stringify(entries, null, 2);
+      if (json === null) return;
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `logbook-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setFeedback({ kind: 'info', text: 'Backup download requested. Check your downloads before clearing browser data. Unsaved form changes are not included.' });
+    } catch {
+      setFeedback({ kind: 'error', text: 'The backup download could not start. Your records have not changed. Try again in a browser that allows downloads.' });
+    }
   };
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const imported = JSON.parse(e.target?.result as string);
-        if (Array.isArray(imported)) {
-          const merged = [...entries];
-          const existingIds = new Set(entries.map(e => e.id));
-          
-          for (const entry of imported) {
-            if (!existingIds.has(entry.id)) {
-              merged.push(entry);
-            }
-          }
-          
-          setEntries(merged);
-          saveEntries(merged);
-          alert(`Imported ${imported.length - (merged.length - entries.length)} flights (${merged.length - entries.length} new)`);
-        }
-      } catch {
-        alert('Invalid logbook file');
-      }
-    };
-    reader.readAsText(file);
+    event.target.value = '';
+    if (!file || locked || view === 'add') return;
+    setImporting(true);
+    setFeedback({ kind: 'info', text: 'Reading logbook backup…' });
+    try {
+      const imported = parseEntries(await file.text());
+      const existingIds = new Set(entries.map(e => e.id));
+      const additions = imported.filter(entry => !existingIds.has(entry.id));
+      const skipped = imported.length - additions.length;
+      if (additions.length && !persist([...entries, ...additions])) return;
+      setFeedback({ kind: 'success', text: `Imported ${additions.length} new ${additions.length === 1 ? 'flight' : 'flights'}; ${skipped} existing ${skipped === 1 ? 'ID' : 'IDs'} skipped. Existing records were not replaced.` });
+    } catch {
+      setFeedback({ kind: 'error', text: 'This file could not be imported. Choose an AV Weather JSON export with complete flight records and unique IDs. No records were changed.' });
+    } finally {
+      setImporting(false);
+    }
   };
 
-  if (!browserReady) {
-    return <AppShell><main id="workspace-content" tabIndex={-1} className="av-page-heading"><h1>Flight logbook</h1><p role="status">Opening your local logbook…</p></main></AppShell>;
-  }
+  const startEntry = (entry: FlightEntry | null = null) => {
+    setEditingEntry(entry);
+    setFeedback(null);
+    changeView('add');
+  };
 
   return (
-    <AppShell>
-    <main id="workspace-content" tabIndex={-1} className="min-h-screen bg-slate-950 text-white pb-20">
-      <header className="av-page-heading">
+    <main id="workspace-content" tabIndex={-1} className="av-logbook">
+      <header className="av-logbook-header">
         <div>
-          <p className="av-eyebrow">04 / Your flying record</p>
+          <p className="av-logbook-eyebrow">04 / Your flying record</p>
           <h1>Flight logbook</h1>
-          <p className="av-page-description">{totals.flights} {totals.flights === 1 ? 'flight' : 'flights'} · {totals.totalTime.toFixed(1)} total hours</p>
-          <p className="av-local-note">Stored in this browser only. Export a backup before clearing browser data.</p>
+          <p className="av-logbook-description">A record of your flights, time and recent activity.</p>
         </div>
-        <button onClick={() => { setEditingEntry(null); setView('add'); }} className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium">+ Add Flight</button>
+        {view !== 'add' && <button className="av-logbook-button av-logbook-primary" disabled={locked} onClick={() => startEntry()}>+ Add Flight</button>}
       </header>
 
-      {/* Tab Navigation */}
-      <div className="av-subnav">
-        <div className="flex overflow-x-auto">
-          {[
-            { key: 'list', label: '📋 Entries' },
-            { key: 'totals', label: '📊 Totals' },
-            { key: 'currency', label: '✅ Currency' }
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              aria-pressed={view === key}
-              onClick={() => setView(key as typeof view)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-                view === key 
-                  ? 'text-blue-400 border-blue-400 bg-slate-800/50' 
-                  : 'text-slate-400 border-transparent hover:text-white hover:bg-slate-800/30'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      <section className="av-logbook-storage" aria-label="Local storage and backups">
+        <div>
+          <strong>Stored in this browser only</strong>
+          <p>No account or device sync. Export a backup before clearing browser data.</p>
         </div>
-      </div>
+        <div className="av-logbook-actions">
+          <button className="av-logbook-button" onClick={handleExport} disabled={Boolean(loaded.error) && loaded.raw === null}>
+            {loaded.error ? 'Download stored data' : 'Export backup'}
+          </button>
+          <button className="av-logbook-button av-logbook-quiet" disabled={locked || view === 'add'} onClick={() => importInput.current?.click()}>Import JSON</button>
+          <input ref={importInput} className="av-logbook-file" type="file" accept=".json,application/json" aria-label="Import logbook JSON file" tabIndex={-1} disabled={locked || view === 'add'} onChange={handleImport} />
+        </div>
+        <p className="av-logbook-backup-help">Import adds new IDs and skips existing IDs; it never replaces an existing flight.</p>
+      </section>
 
-      {/* Content */}
-      <div className="p-4 max-w-4xl mx-auto">
-        {/* List View */}
-        {view === 'list' && (
-          <div className="space-y-4">
-            {entries.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <p className="text-4xl mb-4">✈️</p>
-                <p className="text-lg">No flights logged yet</p>
-                <p className="text-sm mt-2">Use Add Flight to record your first entry.</p>
-              </div>
-            ) : (
-              <>
-                {/* Sort controls */}
-                <div className="av-logbook-sort flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-400">Sort by:</span>
-                    <button
-                      onClick={() => { setSortField('date'); setSortDir(prev => sortField === 'date' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'); }}
-                      className={`px-2 py-1 text-sm rounded ${sortField === 'date' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}
-                    >
-                      Date {sortField === 'date' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </button>
-                    <button
-                      onClick={() => { setSortField('totalTime'); setSortDir(prev => sortField === 'totalTime' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'); }}
-                      className={`px-2 py-1 text-sm rounded ${sortField === 'totalTime' ? 'bg-slate-700 text-white' : 'text-slate-400'}`}
-                    >
-                      Time {sortField === 'totalTime' && (sortDir === 'asc' ? '↑' : '↓')}
-                    </button>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <button onClick={handleExport} className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded">
-                      Export
-                    </button>
-                    <label className="av-import px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded cursor-pointer">
-                      Import
-                      <input type="file" accept=".json" onChange={handleImport} aria-label="Import logbook JSON file" />
-                    </label>
-                  </div>
-                </div>
+      {loaded.error && <p className="av-logbook-feedback av-logbook-error" role="alert">{loaded.error}</p>}
+      {view !== 'add' && <FeedbackMessage feedback={feedback} />}
 
-                {/* Entries */}
-                <div className="space-y-2">
-                  {sortedEntries.map(entry => (
-                    <div key={entry.id} className="bg-slate-800/50 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="av-logbook-entry-heading flex items-center gap-3">
-                            <span className="font-bold text-lg">{entry.from} → {entry.to}</span>
-                            <span className="text-slate-400 text-sm">{entry.date}</span>
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-slate-400">
-                            <span>{entry.aircraft} ({entry.aircraftType})</span>
-                            {entry.route && <span>via {entry.route}</span>}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-white">{entry.totalTime.toFixed(1)}</p>
-                          <p className="text-xs text-slate-400">hours</p>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mt-3 text-sm">
-                        {entry.pic > 0 && <MiniStat label="PIC" value={entry.pic.toFixed(1)} />}
-                        {entry.dual > 0 && <MiniStat label="Dual" value={entry.dual.toFixed(1)} />}
-                        {entry.crossCountry > 0 && <MiniStat label="XC" value={entry.crossCountry.toFixed(1)} />}
-                        {entry.nightTime > 0 && <MiniStat label="Night" value={entry.nightTime.toFixed(1)} />}
-                        {entry.actualInstrument > 0 && <MiniStat label="Actual" value={entry.actualInstrument.toFixed(1)} />}
-                        {entry.dayLandings > 0 && <MiniStat label="Day Ldg" value={entry.dayLandings.toString()} />}
-                        {entry.nightLandings > 0 && <MiniStat label="Night Ldg" value={entry.nightLandings.toString()} />}
-                        {entry.approaches > 0 && <MiniStat label="Appr" value={entry.approaches.toString()} />}
-                      </div>
-                      
-                      {entry.remarks && (
-                        <p className="mt-2 text-sm text-slate-400 italic">{entry.remarks}</p>
-                      )}
-                      
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-slate-700">
-                        <button
-                          onClick={() => { setEditingEntry(entry); setView('add'); }}
-                          className="px-3 py-1 text-sm bg-slate-700 hover:bg-slate-600 rounded"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEntry(entry.id)}
-                          className="px-3 py-1 text-sm text-red-400 hover:bg-red-900/30 rounded"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+      {!loaded.error && <>
+        <div className="av-logbook-overview" aria-label="Logbook summary">
+          <div><span>Flights recorded</span><strong>{totals.flights}</strong></div>
+          <div><span>Total flight time</span><strong>{totals.totalTime.toFixed(1)} <small>hours</small></strong></div>
+          <div><span>Landings logged</span><strong>{totals.dayLandings + totals.nightLandings}</strong></div>
+        </div>
+
+        <nav className="av-logbook-nav" aria-label="Logbook views">
+          {([{ key: 'list', label: 'Entries' }, { key: 'totals', label: 'Totals' }, { key: 'currency', label: 'Recency' }] as const).map(({ key, label }) => (
+            <button key={key} aria-pressed={view === key} aria-controls="av-logbook-content" disabled={view === 'add' || importing} onClick={() => changeView(key)}>{label}</button>
+          ))}
+        </nav>
+        {view === 'add' && <p className="av-logbook-form-note">Save or cancel this entry to return to your records. Drafts are not saved automatically.</p>}
+
+        <section id="av-logbook-content" className="av-logbook-content" aria-labelledby="av-logbook-view-title">
+          <div className="av-logbook-section-heading">
+            <div>
+              <h2 id="av-logbook-view-title" ref={contentHeading} tabIndex={-1}>{view === 'list' ? 'Flight entries' : view === 'totals' ? 'Your logged totals' : view === 'currency' ? 'Recency indicators' : editingEntry ? 'Edit Flight' : 'Log New Flight'}</h2>
+              {view === 'list' && <p>{entries.length ? 'Review a flight or edit its details. Your newest flights appear first by default.' : 'Start with one flight, or restore a JSON backup using Import JSON above.'}</p>}
+              {view === 'totals' && <p>All saved entries in this browser. Time categories can overlap; they are not added together to calculate total time.</p>}
+            </div>
+            {view === 'list' && entries.length > 0 && <div className="av-logbook-sort-control">
+              <label htmlFor="av-logbook-sort">Order entries</label>
+              <select id="av-logbook-sort" value={`${sortField}-${sortDir}`} onChange={e => {
+                const [field, direction] = e.target.value.split('-');
+                setSortField(field as typeof sortField); setSortDir(direction as typeof sortDir);
+              }}>
+                <option value="date-desc">Newest date first</option><option value="date-asc">Oldest date first</option>
+                <option value="totalTime-desc">Longest flight first</option><option value="totalTime-asc">Shortest flight first</option>
+              </select>
+            </div>}
           </div>
-        )}
 
-        {/* Totals View */}
-        {view === 'totals' && (
-          <div className="space-y-6">
-            <div className="bg-slate-800/50 rounded-lg p-6">
-              <h3 className="text-lg font-bold mb-4">Flight Time Totals</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <TotalItem label="Total Time" value={totals.totalTime.toFixed(1)} unit="hrs" highlight />
-                <TotalItem label="PIC" value={totals.pic.toFixed(1)} unit="hrs" />
-                <TotalItem label="SIC" value={totals.sic.toFixed(1)} unit="hrs" />
-                <TotalItem label="Dual Received" value={totals.dual.toFixed(1)} unit="hrs" />
-                <TotalItem label="Solo" value={totals.solo.toFixed(1)} unit="hrs" />
-                <TotalItem label="Cross-Country" value={totals.crossCountry.toFixed(1)} unit="hrs" />
+          {view === 'list' && (entries.length === 0 ? (
+            <div className="av-logbook-empty">
+              <span className="av-logbook-empty-mark" aria-hidden="true">01</span>
+              <div><h3>No flights logged yet</h3><p>Add the date, aircraft, route and total time. Include other time categories and notes when you need them.</p>
+                <button className="av-logbook-button av-logbook-primary" disabled={locked} onClick={() => startEntry()}>Log your first flight</button>
               </div>
+              <div className="av-logbook-empty-aside"><strong>Your records, kept local.</strong><p>There are no sample flights here. Only entries you add or import will appear.</p></div>
             </div>
-
-            <div className="bg-slate-800/50 rounded-lg p-6">
-              <h3 className="text-lg font-bold mb-4">Conditions</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <TotalItem label="Day" value={totals.dayTime.toFixed(1)} unit="hrs" />
-                <TotalItem label="Night" value={totals.nightTime.toFixed(1)} unit="hrs" />
-                <TotalItem label="Actual IMC" value={totals.actualInstrument.toFixed(1)} unit="hrs" />
-                <TotalItem label="Simulated IMC" value={totals.simulatedInstrument.toFixed(1)} unit="hrs" />
+          ) : <div className="av-logbook-entry-list">
+            {sortedEntries.map(entry => <article key={entry.id} className="av-logbook-entry" aria-label={`Flight ${entry.date}, ${entry.from} to ${entry.to}`}>
+              <div className="av-logbook-entry-top">
+                <div><time dateTime={entry.date}>{entry.date}</time><h3>{entry.from} <span aria-hidden="true">→</span><span className="av-logbook-sr"> to </span> {entry.to}</h3><p>{entry.aircraft} <span className="av-logbook-muted">/ {entry.aircraftType}</span></p>{entry.route && <p className="av-logbook-muted">Via {entry.route}</p>}</div>
+                <p className="av-logbook-entry-hours"><strong>{entry.totalTime.toFixed(1)}</strong><span>total hours</span></p>
               </div>
-            </div>
-
-            <div className="bg-slate-800/50 rounded-lg p-6">
-              <h3 className="text-lg font-bold mb-4">Landings & Approaches</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <TotalItem label="Day Landings" value={totals.dayLandings.toString()} />
-                <TotalItem label="Night Landings" value={totals.nightLandings.toString()} />
-                <TotalItem label="Approaches" value={totals.approaches.toString()} />
-                <TotalItem label="Holds" value={totals.holds.toString()} />
+              <dl className="av-logbook-mini-stats">
+                {entry.pic > 0 && <MiniStat label="PIC hours" value={entry.pic.toFixed(1)} />}
+                {entry.dual > 0 && <MiniStat label="Dual hours" value={entry.dual.toFixed(1)} />}
+                {entry.crossCountry > 0 && <MiniStat label="Cross-country hours" value={entry.crossCountry.toFixed(1)} />}
+                {entry.nightTime > 0 && <MiniStat label="Night hours" value={entry.nightTime.toFixed(1)} />}
+                {entry.actualInstrument > 0 && <MiniStat label="Actual instrument hours" value={entry.actualInstrument.toFixed(1)} />}
+                {entry.dayLandings > 0 && <MiniStat label="Day landings" value={String(entry.dayLandings)} />}
+                {entry.nightLandings > 0 && <MiniStat label="Night landings" value={String(entry.nightLandings)} />}
+                {entry.approaches > 0 && <MiniStat label="Approaches" value={String(entry.approaches)} />}
+              </dl>
+              {entry.remarks && <p className="av-logbook-remarks">{entry.remarks}</p>}
+              <div className="av-logbook-entry-actions">
+                <button className="av-logbook-button" disabled={locked} onClick={() => startEntry(entry)}>Edit flight</button>
+                <button className="av-logbook-button av-logbook-danger" disabled={locked} onClick={() => handleDeleteEntry(entry)}>Delete</button>
               </div>
-            </div>
+            </article>)}
+          </div>)}
 
-            <div className="bg-slate-800/50 rounded-lg p-6">
-              <h3 className="text-lg font-bold mb-4">Summary</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <TotalItem label="Total Flights" value={totals.flights.toString()} highlight />
-                <TotalItem label="Total Landings" value={(totals.dayLandings + totals.nightLandings).toString()} />
-              </div>
-            </div>
-          </div>
-        )}
+          {view === 'totals' && <div className="av-logbook-total-panels">
+            <section className="av-logbook-panel"><h3>Flight time</h3><dl className="av-logbook-totals">
+              <TotalItem label="Total time" value={totals.totalTime.toFixed(1)} unit="hours" highlight />
+              <TotalItem label="Pilot in command (PIC)" value={totals.pic.toFixed(1)} unit="hours" />
+              <TotalItem label="Second in command (SIC)" value={totals.sic.toFixed(1)} unit="hours" />
+              <TotalItem label="Dual received" value={totals.dual.toFixed(1)} unit="hours" />
+              <TotalItem label="Solo" value={totals.solo.toFixed(1)} unit="hours" />
+              <TotalItem label="Cross-country" value={totals.crossCountry.toFixed(1)} unit="hours" />
+            </dl></section>
+            <section className="av-logbook-panel"><h3>Conditions</h3><dl className="av-logbook-totals">
+              <TotalItem label="Day" value={totals.dayTime.toFixed(1)} unit="hours" /><TotalItem label="Night" value={totals.nightTime.toFixed(1)} unit="hours" />
+              <TotalItem label="Actual instrument" value={totals.actualInstrument.toFixed(1)} unit="hours" /><TotalItem label="Simulated instrument" value={totals.simulatedInstrument.toFixed(1)} unit="hours" />
+            </dl></section>
+            <section className="av-logbook-panel"><h3>Landings & approaches</h3><dl className="av-logbook-totals">
+              <TotalItem label="Day landings" value={String(totals.dayLandings)} /><TotalItem label="Night landings" value={String(totals.nightLandings)} />
+              <TotalItem label="Approaches" value={String(totals.approaches)} /><TotalItem label="Holds" value={String(totals.holds)} />
+            </dl></section>
+            <section className="av-logbook-panel"><h3>Summary</h3><dl className="av-logbook-totals">
+              <TotalItem label="Total flights" value={String(totals.flights)} highlight /><TotalItem label="Total landings" value={String(totals.dayLandings + totals.nightLandings)} />
+            </dl></section>
+          </div>}
 
-        {/* Currency View */}
-        {view === 'currency' && (
-          <div className="space-y-4">
-            <div className="text-sm text-slate-400 mb-4">
-              These simplified estimates use your logged entries, not a complete regulatory assessment. They do not establish legal currency or fitness to fly. Verify all requirements and official records independently.
-            </div>
-            
-            {currency.map((item, i) => (
-              <div key={i} className={`bg-slate-800/50 rounded-lg p-4 border-l-4 ${
-                item.status === 'current' ? 'border-green-500' :
-                item.status === 'warning' ? 'border-amber-500' :
-                'border-red-500'
-              }`}>
-                <div className="flex flex-wrap gap-3 items-start justify-between">
-                  <div>
-                    <h4 className="font-bold">{item.name}</h4>
-                    <p className="text-sm text-slate-400">{item.description}</p>
-                    <p className="text-sm text-slate-500 mt-1">{item.requirement}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    item.status === 'current' ? 'bg-green-900/50 text-green-300' :
-                    item.status === 'warning' ? 'bg-amber-900/50 text-amber-300' :
-                    'bg-red-900/50 text-red-300'
-                  }`}>
-                    {item.status === 'current' ? 'Count met' :
-                     item.status === 'warning' ? 'Partial count' :
-                     'Count not met'}
-                  </span>
-                </div>
-                {item.lastCompleted && (
-                  <p className="text-xs text-slate-500 mt-2">
-                    Last: {item.lastCompleted}
-                  </p>
-                )}
-              </div>
-            ))}
+          {view === 'currency' && <div className="av-logbook-recency">
+            <div className="av-logbook-caution"><h3>Incomplete checks, not clearance to fly</h3><p>These simplified estimates use your logged entries, not a complete regulatory assessment. They do not establish legal currency or fitness to fly. Verify all requirements and official records independently.</p><p>The existing counters do not verify takeoffs, full-stop landings, aircraft category or class, instrument tracking/intercepting, or calendar-month rules. A count being met is not a determination of eligibility.</p></div>
+            <div className="av-logbook-recency-grid">{currency.map((item, i) => <section key={item.name} className="av-logbook-panel">
+              <p className="av-logbook-eyebrow">Logged activity / {item.description}</p>
+              <h3>{['Day landings', 'Night landings', 'Instrument activity'][i]}</h3>
+              <span className={`av-logbook-count av-logbook-count-${item.status}`}>{item.status === 'current' ? 'Count met' : item.status === 'warning' ? 'Partial count' : 'Count not met'}</span>
+              <p>Counter: {item.requirement}</p>
+              <p className="av-logbook-muted">{item.lastCompleted ? `Matching logged entry: ${item.lastCompleted}` : 'No matching logged entry.'}</p>
+            </section>)}</div>
+            <section className="av-logbook-panel"><h3>Keep a separate record</h3><p>This logbook does not assess flight reviews, medical eligibility, instrument proficiency checks, endorsements or operation-specific requirements. Verify what applies to your flight using official records and current rules.</p></section>
+          </div>}
 
-            <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mt-6">
-              <h4 className="text-blue-400 font-medium mb-2">📋 Manual Tracking</h4>
-              <p className="text-sm text-slate-300">
-                Track these items separately:
-              </p>
-              <ul className="text-sm text-slate-400 mt-2 space-y-1 list-disc list-inside">
-                <li>Flight Review (24 calendar months)</li>
-                <li>Medical Certificate (Class depends on operation)</li>
-                <li>IPC (if IFR currency lapsed)</li>
-                <li>High Performance / Complex endorsements</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {/* Add/Edit Form */}
-        {view === 'add' && (
-          <FlightEntryForm
-            entry={editingEntry}
-            onSave={handleSaveEntry}
-            onCancel={() => { setEditingEntry(null); setView('list'); }}
-          />
-        )}
-      </div>
+          {view === 'add' && <FlightEntryForm key={editingEntry?.id ?? 'new'} entry={editingEntry} feedback={feedback} onSave={handleSaveEntry} onCancel={() => {
+            setEditingEntry(null); changeView('list');
+            setFeedback({ kind: 'info', text: 'Entry canceled. No changes were saved.' });
+          }} />}
+        </section>
+      </>}
     </main>
-    </AppShell>
   );
+}
+
+function FeedbackMessage({ feedback }: { feedback: Feedback }) {
+  if (!feedback) return null;
+  return <p className={`av-logbook-feedback av-logbook-${feedback.kind}`} role={feedback.kind === 'error' ? 'alert' : 'status'}>{feedback.text}</p>;
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-slate-700/50 rounded px-2 py-1">
-      <span className="text-slate-400 text-xs">{label}: </span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
+  return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
 function TotalItem({ label, value, unit, highlight }: { label: string; value: string; unit?: string; highlight?: boolean }) {
-  return (
-    <div>
-      <p className="text-slate-400 text-sm">{label}</p>
-      <p className={`text-2xl font-bold ${highlight ? 'text-blue-400' : 'text-white'}`}>
-        {value}
-        {unit && <span className="text-sm text-slate-400 ml-1">{unit}</span>}
-      </p>
-    </div>
-  );
+  return <div className={highlight ? 'av-logbook-highlight' : undefined}><dt>{label}</dt><dd>{value}{unit && <small> {unit}</small>}</dd></div>;
 }
 
-function FlightEntryForm({ 
-  entry, 
-  onSave, 
-  onCancel 
-}: { 
-  entry: FlightEntry | null; 
-  onSave: (entry: Omit<FlightEntry, 'id' | 'createdAt' | 'updatedAt'>) => void;
+type FlightDraft = Omit<FlightEntry, 'id' | 'createdAt' | 'updatedAt'>;
+const timeFields = [
+  ['pic', 'Pilot in command (PIC)'], ['sic', 'Second in command (SIC)'], ['dual', 'Dual received'],
+  ['solo', 'Solo'], ['crossCountry', 'Cross-country'], ['dayTime', 'Day'], ['nightTime', 'Night'],
+  ['actualInstrument', 'Actual instrument'], ['simulatedInstrument', 'Simulated instrument'],
+] as const;
+type CountField = 'dayLandings' | 'nightLandings' | 'approaches' | 'holds';
+
+function FlightEntryForm({ entry, onSave, onCancel, feedback }: {
+  entry: FlightEntry | null;
+  onSave: (entry: FlightDraft) => void;
   onCancel: () => void;
+  feedback: Feedback;
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FlightDraft>({
     date: entry?.date || new Date().toISOString().split('T')[0],
-    aircraft: entry?.aircraft || '',
-    aircraftType: entry?.aircraftType || '',
-    from: entry?.from || '',
-    to: entry?.to || '',
-    route: entry?.route || '',
-    totalTime: entry?.totalTime || 0,
-    pic: entry?.pic || 0,
-    sic: entry?.sic || 0,
-    dual: entry?.dual || 0,
-    solo: entry?.solo || 0,
-    crossCountry: entry?.crossCountry || 0,
-    dayTime: entry?.dayTime || 0,
-    nightTime: entry?.nightTime || 0,
-    actualInstrument: entry?.actualInstrument || 0,
-    simulatedInstrument: entry?.simulatedInstrument || 0,
-    dayLandings: entry?.dayLandings || 0,
-    nightLandings: entry?.nightLandings || 0,
-    approaches: entry?.approaches || 0,
-    approachTypes: entry?.approachTypes || '',
-    holds: entry?.holds || 0,
-    remarks: entry?.remarks || ''
+    aircraft: entry?.aircraft || '', aircraftType: entry?.aircraftType || '',
+    from: entry?.from || '', to: entry?.to || '', route: entry?.route || '',
+    totalTime: entry?.totalTime || 0, pic: entry?.pic || 0, sic: entry?.sic || 0,
+    dual: entry?.dual || 0, solo: entry?.solo || 0, crossCountry: entry?.crossCountry || 0,
+    dayTime: entry?.dayTime || 0, nightTime: entry?.nightTime || 0,
+    actualInstrument: entry?.actualInstrument || 0, simulatedInstrument: entry?.simulatedInstrument || 0,
+    dayLandings: entry?.dayLandings || 0, nightLandings: entry?.nightLandings || 0,
+    approaches: entry?.approaches || 0, approachTypes: entry?.approachTypes || '', holds: entry?.holds || 0, remarks: entry?.remarks || '',
   });
+  const [dirty, setDirty] = useState(false);
+  const [cancelFeedback, setCancelFeedback] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(form);
+  useEffect(() => {
+    if (!dirty) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    // Catch same-origin workspace links too; beforeunload alone misses SPA navigation.
+    const warnBeforeNavigation = (event: MouseEvent) => {
+      const link = (event.target as Element).closest?.('a[href]');
+      if (!link || event.defaultPrevented || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#') || link.hasAttribute('download') || link.getAttribute('target') === '_blank') return;
+      if (!confirm('Leave this unsaved flight? Your changes will be lost.')) { event.preventDefault(); event.stopPropagation(); }
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    document.addEventListener('click', warnBeforeNavigation, true);
+    return () => { window.removeEventListener('beforeunload', warnBeforeLeaving); document.removeEventListener('click', warnBeforeNavigation, true); };
+  }, [dirty]);
+
+  const update = <K extends keyof FlightDraft>(key: K, value: FlightDraft[K]) => {
+    setForm(previous => ({ ...previous, [key]: value })); setDirty(true); setCancelFeedback('');
   };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <h2 className="text-xl font-bold">{entry ? 'Edit Flight' : 'Log New Flight'}</h2>
-      
-      {/* Basic Info */}
-      <div className="bg-slate-800/50 rounded-lg p-4 space-y-4">
-        <h3 className="font-medium text-slate-400">Flight Info</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Date</label>
-            <input
-                aria-label="Date"
-              type="date"
-              value={form.date}
-              onChange={e => setForm({...form, date: e.target.value})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Aircraft</label>
-            <input
-                aria-label="Aircraft"
-              type="text"
-              value={form.aircraft}
-              onChange={e => setForm({...form, aircraft: e.target.value.toUpperCase()})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="N12345"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Aircraft Type</label>
-            <input
-                aria-label="Aircraft Type"
-              type="text"
-              value={form.aircraftType}
-              onChange={e => setForm({...form, aircraftType: e.target.value.toUpperCase()})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="C172"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Total Time</label>
-            <input
-                aria-label="Total Time"
-              type="number"
-              step="0.1"
-              value={form.totalTime || ''}
-              onChange={e => setForm({...form, totalTime: parseFloat(e.target.value) || 0})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="1.5"
-              required
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">From</label>
-            <input
-                aria-label="From"
-              type="text"
-              value={form.from}
-              onChange={e => setForm({...form, from: e.target.value.toUpperCase()})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="KJFK"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">To</label>
-            <input
-                aria-label="To"
-              type="text"
-              value={form.to}
-              onChange={e => setForm({...form, to: e.target.value.toUpperCase()})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="KBOS"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Via (optional)</label>
-            <input
-                aria-label="Via (optional)"
-              type="text"
-              value={form.route}
-              onChange={e => setForm({...form, route: e.target.value.toUpperCase()})}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              placeholder="KPHL"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Time Categories */}
-      <div className="bg-slate-800/50 rounded-lg p-4 space-y-4">
-        <h3 className="font-medium text-slate-400">Time Categories</h3>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
-          {[
-            { key: 'pic', label: 'PIC' },
-            { key: 'sic', label: 'SIC' },
-            { key: 'dual', label: 'Dual' },
-            { key: 'solo', label: 'Solo' },
-            { key: 'crossCountry', label: 'X-Country' },
-            { key: 'dayTime', label: 'Day' },
-            { key: 'nightTime', label: 'Night' },
-            { key: 'actualInstrument', label: 'Actual IMC' },
-            { key: 'simulatedInstrument', label: 'Sim IMC' }
-          ].map(({ key, label }) => (
-            <div key={key}>
-              <label className="block text-xs text-slate-400 mb-1">{label}</label>
-              <input
-                aria-label={label}
-                type="number"
-                step="0.1"
-                value={form[key as keyof typeof form] || ''}
-                onChange={e => setForm({...form, [key]: parseFloat(e.target.value) || 0})}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-                placeholder="0.0"
-              />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Landings & Approaches */}
-      <div className="bg-slate-800/50 rounded-lg p-4 space-y-4">
-        <h3 className="font-medium text-slate-400">Landings & Approaches</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Day Landings</label>
-            <input
-                aria-label="Day Landings"
-              type="number"
-              value={form.dayLandings || ''}
-              onChange={e => setForm({...form, dayLandings: parseInt(e.target.value) || 0})}
-              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-              placeholder="0"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Night Landings</label>
-            <input
-                aria-label="Night Landings"
-              type="number"
-              value={form.nightLandings || ''}
-              onChange={e => setForm({...form, nightLandings: parseInt(e.target.value) || 0})}
-              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-              placeholder="0"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Approaches</label>
-            <input
-                aria-label="Approaches"
-              type="number"
-              value={form.approaches || ''}
-              onChange={e => setForm({...form, approaches: parseInt(e.target.value) || 0})}
-              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-              placeholder="0"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Holds</label>
-            <input
-              aria-label="Holds"
-              type="number"
-              value={form.holds || ''}
-              onChange={e => setForm({...form, holds: parseInt(e.target.value) || 0})}
-              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-              placeholder="0"
-            />
-          </div>
-        </div>
-        {form.approaches > 0 && (
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Approach Types</label>
-            <input
-              aria-label="Approach Types"
-              type="text"
-              value={form.approachTypes}
-              onChange={e => setForm({...form, approachTypes: e.target.value})}
-              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-white text-sm"
-              placeholder="ILS, VOR, GPS"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Remarks */}
-      <div className="bg-slate-800/50 rounded-lg p-4">
-        <label className="block text-sm text-slate-400 mb-1">Remarks</label>
-        <textarea
-              aria-label="Remarks"
-          value={form.remarks}
-          onChange={e => setForm({...form, remarks: e.target.value})}
-          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white h-20 resize-none"
-          placeholder="Flight notes, maneuvers, etc."
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-        >
-          {entry ? 'Update Flight' : 'Log Flight'}
-        </button>
-      </div>
-    </form>
+  const textField = (key: 'date' | 'aircraft' | 'aircraftType' | 'from' | 'to' | 'route', label: string, placeholder?: string, required = false) => (
+    <div className="av-logbook-field" key={key}>
+      <label htmlFor={`av-logbook-${key}`}>{label}{required ? ' *' : ''}</label>
+      <input id={`av-logbook-${key}`} name={key} type={key === 'date' ? 'date' : 'text'} value={form[key]} required={required} placeholder={placeholder} onChange={e => update(key, key === 'date' ? e.target.value : e.target.value.toUpperCase())} />
+    </div>
   );
+  const numberField = (key: typeof timeFields[number][0] | CountField | 'totalTime', label: string, count = false, required = false) => (
+    <div className="av-logbook-field" key={key}>
+      <label htmlFor={`av-logbook-${key}`}>{label} ({count ? 'count' : 'hours'}){required ? ' *' : ''}</label>
+      <input id={`av-logbook-${key}`} name={key} type="number" inputMode={count ? 'numeric' : 'decimal'} min="0" step={count ? '1' : '0.1'} value={form[key] || ''} placeholder={count ? '0' : '0.0'} required={required} onChange={e => update(key, e.target.value === '' ? 0 : Number(e.target.value))} />
+    </div>
+  );
+
+  return <form className="av-logbook-form" aria-label={entry ? 'Edit flight' : 'New flight'} onSubmit={e => { e.preventDefault(); onSave(form); }}>
+    <p className="av-logbook-muted">Fields marked * are required. Enter time in decimal hours, for example 1.5 for one hour and 30 minutes. Optional number fields left blank are saved as zero.</p>
+    <fieldset className="av-logbook-panel"><legend>01 / Flight details</legend>
+      <div className="av-logbook-fields">
+        {textField('date', 'Date', undefined, true)}{numberField('totalTime', 'Total time', false, true)}
+        {textField('aircraft', 'Aircraft registration', 'e.g. N12345', true)}{textField('aircraftType', 'Aircraft type', 'e.g. C172', true)}
+        {textField('from', 'From — departure', 'e.g. KJFK', true)}{textField('to', 'To — destination', 'e.g. KBOS', true)}
+      </div>
+    </fieldset>
+    <fieldset className="av-logbook-panel"><legend>02 / Time & landings</legend>
+      <p className="av-logbook-muted">Optional. Record only the categories that apply; they can overlap. These fields are not filled from total time.</p>
+      <div className="av-logbook-fields">
+        {numberField('pic', 'Pilot in command (PIC)')}{numberField('dual', 'Dual received')}
+        {numberField('dayLandings', 'Day landings', true)}{numberField('nightLandings', 'Night landings', true)}
+      </div>
+      <details className="av-logbook-disclosure" open={entry && timeFields.some(([key]) => key !== 'pic' && key !== 'dual' && entry[key] !== 0) ? true : undefined}>
+        <summary>More time categories <span>Solo, SIC, cross-country, night & instrument</span></summary>
+        <div className="av-logbook-fields">{timeFields.filter(([key]) => key !== 'pic' && key !== 'dual').map(([key, label]) => numberField(key, label))}</div>
+      </details>
+    </fieldset>
+    <details className="av-logbook-panel av-logbook-disclosure" open={entry && (entry.approaches !== 0 || entry.holds !== 0 || entry.approachTypes || entry.route) ? true : undefined}>
+      <summary>03 / Route & instrument details <span>Optional approaches, holds and intermediate stops</span></summary>
+      <div className="av-logbook-fields">
+        {textField('route', 'Via — intermediate stops (optional)', 'e.g. KPHL')}
+        {numberField('approaches', 'Approaches', true)}{numberField('holds', 'Holds', true)}
+        <div className="av-logbook-field"><label htmlFor="av-logbook-approachTypes">Approach types (optional)</label><input id="av-logbook-approachTypes" value={form.approachTypes} onChange={e => update('approachTypes', e.target.value)} placeholder="e.g. ILS, VOR, GPS" /></div>
+      </div>
+    </details>
+    <div className="av-logbook-panel av-logbook-field"><label htmlFor="av-logbook-remarks">Remarks (optional)</label><textarea id="av-logbook-remarks" value={form.remarks} onChange={e => update('remarks', e.target.value)} rows={3} placeholder="Flight notes, maneuvers or details to remember" /></div>
+    <div className="av-logbook-form-footer">
+      <FeedbackMessage feedback={feedback} />
+      {cancelFeedback && <p className="av-logbook-feedback" role="status">{cancelFeedback}</p>}
+      <p>Saved to this browser only. No cloud backup.</p>
+      <div className="av-logbook-actions">
+        <button type="submit" className="av-logbook-button av-logbook-primary">{entry ? 'Update Flight' : 'Log Flight'}</button>
+        <button type="button" className="av-logbook-button" onClick={() => {
+          if (dirty && !confirm('Discard unsaved changes to this flight?')) { setCancelFeedback('Still editing. Your unsaved changes are here.'); return; }
+          onCancel();
+        }}>Cancel</button>
+      </div>
+    </div>
+  </form>;
 }

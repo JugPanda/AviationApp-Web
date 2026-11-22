@@ -187,12 +187,13 @@ function DensityAltitudeForm() {
   return (
     <div className="space-y-6">
       {/* Inputs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="av-tools-inputs grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
+          <label htmlFor="av-tools-densityaltitude-0" className="block text-sm font-medium text-slate-400 mb-2">
             Field Elevation (ft)
           </label>
-          <input
+          <input id="av-tools-densityaltitude-0"
             type="number"
             value={fieldElevation}
             onChange={(e) => setFieldElevation(Number(e.target.value))}
@@ -202,10 +203,10 @@ function DensityAltitudeForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
+          <label htmlFor="av-tools-densityaltitude-1" className="block text-sm font-medium text-slate-400 mb-2">
             Altimeter Setting (inHg)
           </label>
-          <input
+          <input id="av-tools-densityaltitude-1"
             type="number"
             step="0.01"
             value={altimeter}
@@ -216,11 +217,11 @@ function DensityAltitudeForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
-            Temperature
+          <label htmlFor="av-tools-densityaltitude-2" className="block text-sm font-medium text-slate-400 mb-2">
+            Outside air temperature (°{tempUnit})
           </label>
           <div className="flex gap-2">
-            <input
+            <input id="av-tools-densityaltitude-2"
               type="number"
               value={temperature}
               onChange={(e) => setTemperature(Number(e.target.value))}
@@ -228,13 +229,15 @@ function DensityAltitudeForm() {
             />
             <div className="flex rounded-lg overflow-hidden border border-slate-700">
               <button
-                onClick={() => setTempUnit('C')}
+                aria-pressed={tempUnit === 'C'}
+            onClick={() => setTempUnit('C')}
                 className={`px-3 py-2 text-sm font-medium transition-colors ${tempUnit === 'C' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}
               >
                 °C
               </button>
               <button
-                onClick={() => setTempUnit('F')}
+                aria-pressed={tempUnit === 'F'}
+            onClick={() => setTempUnit('F')}
                 className={`px-3 py-2 text-sm font-medium transition-colors ${tempUnit === 'F' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}
               >
                 °F
@@ -244,10 +247,10 @@ function DensityAltitudeForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-2">
-            Dewpoint (optional)
+          <label htmlFor="av-tools-densityaltitude-3" className="block text-sm font-medium text-slate-400 mb-2">
+            Dewpoint (°{tempUnit}, optional)
           </label>
-          <input
+          <input id="av-tools-densityaltitude-3"
             type="number"
             value={dewpoint}
             onChange={(e) => setDewpoint(e.target.value === '' ? '' : Number(e.target.value))}
@@ -271,7 +274,7 @@ function DensityAltitudeForm() {
       <div className="bg-slate-800/50 rounded-lg p-4 space-y-3">
         <h4 className="text-sm font-medium text-slate-400">Calculation Breakdown</h4>
         
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="av-tools-result-breakdown grid grid-cols-2 gap-3 text-sm">
           <div className="flex justify-between">
             <span className="text-slate-400">Field Elevation:</span>
             <span className="font-medium">{fieldElevation.toLocaleString()} ft</span>

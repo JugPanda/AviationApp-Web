@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { containDialogTab } from '@/lib/dialog-focus';
+
+import { useState, useMemo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import AppShell from '@/components/AppShell';
+import './plan.css';
 
 interface Waypoint {
   id: string;
@@ -74,6 +77,8 @@ export default function PlanPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [showPrintView, setShowPrintView] = useState(false);
+  const [planStatus, setPlanStatus] = useState('');
+  const [storageError, setStorageError] = useState('');
   
 
   const addWaypoint = useCallback(() => {
@@ -177,8 +182,15 @@ export default function PlanPage() {
     };
     
     const plans = [...savedPlans, plan];
-    savePlans(plans);
+    try {
+      savePlans(plans);
+    } catch {
+      setStorageError('Could not save in this browser. Check available storage and browser permissions, then try again.');
+      return;
+    }
     setSavedPlans(plans);
+    setStorageError('');
+    setPlanStatus(`Saved “${plan.name}” in this browser.`);
     setShowSaveModal(false);
     setPlanName('');
   };
@@ -192,14 +204,22 @@ export default function PlanPage() {
     setFuelBurnRate(plan.fuelBurnRate);
     setFuelOnboard(plan.fuelOnboard);
     setReserveMinutes(plan.reserveMinutes);
+    setPlanStatus(`Loaded “${plan.name}”. Check the date and magnetic variation; they are not stored with plans.`);
     setShowLoadModal(false);
   };
 
   const handleDeletePlan = (id: string) => {
     if (!confirm('Delete this flight plan?')) return;
     const plans = savedPlans.filter(p => p.id !== id);
-    savePlans(plans);
+    try {
+      savePlans(plans);
+    } catch {
+      setStorageError('Could not delete this plan from browser storage. Try again.');
+      return;
+    }
     setSavedPlans(plans);
+    setStorageError('');
+    setPlanStatus('Deleted the saved plan from this browser.');
   };
 
   const formatTime = (minutes: number): string => {
@@ -211,7 +231,7 @@ export default function PlanPage() {
   // Print view
   if (showPrintView) {
     return (
-      <div className="min-h-screen bg-white text-black p-8 print:p-4">
+      <div className="av-plan-print min-h-screen bg-white text-black p-8 print:p-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between items-start mb-6 print:mb-4">
             <div>
@@ -229,7 +249,7 @@ export default function PlanPage() {
           </div>
 
           {/* Aircraft Info */}
-          <div className="grid grid-cols-4 gap-4 mb-6 p-3 border rounded text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 p-3 border rounded text-sm">
             <div><strong>TAS:</strong> {tas} kts</div>
             <div><strong>Fuel Rate:</strong> {fuelBurnRate} gal/hr</div>
             <div><strong>Fuel Onboard:</strong> {fuelOnboard} gal</div>
@@ -237,6 +257,8 @@ export default function PlanPage() {
           </div>
           
           {/* NavLog Table */}
+          <p className="av-plan-print-hint print:hidden">On a small screen, scroll the navigation table sideways to see every column.</p>
+          <div className="av-plan-print-scroll" role="region" aria-label="Printable navigation table" tabIndex={0}>
           <table className="w-full border-collapse border border-gray-300 text-sm mb-6">
             <thead>
               <tr className="bg-gray-100">
@@ -289,6 +311,7 @@ export default function PlanPage() {
               )}
             </tbody>
           </table>
+          </div>
 
           {/* Fuel Summary */}
           {totals && (
@@ -328,395 +351,240 @@ export default function PlanPage() {
 
   return (
     <AppShell>
-    <main id="workspace-content" tabIndex={-1} className="min-h-screen bg-slate-950 text-white pb-20">
-      <header className="av-page-heading">
-        <div>
-          <p className="av-eyebrow">02 / Route preparation</p>
-          <h1>Flight planning</h1>
-          <p className="av-page-description">Build your route, work through each leg, and print a navigation log.</p>
-          <p className="av-local-note">Saved plans stay in this browser. No device sync.</p>
-        </div>
-        <div className="av-page-actions">
-          <button onClick={() => setShowLoadModal(true)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">Load plan</button>
-          <button onClick={() => setShowSaveModal(true)} className="px-4 py-2 bg-blue-600 rounded-lg text-sm">Save plan</button>
-          <button onClick={() => setShowPrintView(true)} disabled={legs.length === 0} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg text-sm" aria-label="Preview printable navigation log">Print</button>
-        </div>
-      </header>
-
-      <div className="p-4 max-w-5xl mx-auto space-y-6">
-        {/* Route Header */}
-        <div className="bg-slate-800/50 rounded-lg p-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Departure</label>
-              <input
-                aria-label="Departure"
-                type="text"
-                value={departure}
-                onChange={(e) => setDeparture(e.target.value.toUpperCase())}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-lg font-bold"
-                placeholder="KJFK"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Destination</label>
-              <input
-                aria-label="Destination"
-                type="text"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value.toUpperCase())}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-lg font-bold"
-                placeholder="KBOS"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Mag Variation</label>
-              <input
-                aria-label="Mag Variation"
-                type="number"
-                value={magneticVariation}
-                onChange={(e) => setMagneticVariation(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-                placeholder="0"
-                step="0.5"
-              />
-              <p className="text-xs text-slate-500 mt-1">West = negative</p>
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Date</label>
-              <input
-                aria-label="Date"
-                type="date"
-                defaultValue={new Date().toISOString().split('T')[0]}
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
-              />
-            </div>
+      <main id="workspace-content" tabIndex={-1} className="av-plan">
+        <header className="av-page-heading">
+          <div>
+            <p className="av-eyebrow">02 / Route preparation</p>
+            <h1>Flight planning</h1>
+            <p className="av-page-description">Enter your route and aircraft figures, work through each leg, then review your navigation log.</p>
+            <p className="av-local-note">Saved plans stay in this browser. No device sync.</p>
           </div>
-        </div>
-
-        {/* Aircraft Settings */}
-        <div className="bg-slate-800/50 rounded-lg p-4">
-          <h2 className="text-sm font-medium text-slate-400 mb-2">Aircraft Performance</h2>
-          <p className="text-xs text-slate-400 mb-4">Starting values are placeholders, not aircraft-specific data. Enter verified performance and fuel figures.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">TAS (kts)</label>
-              <input
-                aria-label="TAS (kts)"
-                type="number"
-                value={tas}
-                onChange={(e) => setTas(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Fuel Burn (gal/hr)</label>
-              <input
-                aria-label="Fuel Burn (gal/hr)"
-                type="number"
-                value={fuelBurnRate}
-                onChange={(e) => setFuelBurnRate(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-                step="0.5"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Fuel Onboard (gal)</label>
-              <input
-                aria-label="Fuel Onboard (gal)"
-                type="number"
-                value={fuelOnboard}
-                onChange={(e) => setFuelOnboard(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Reserve (min)</label>
-              <input
-                aria-label="Reserve (min)"
-                type="number"
-                value={reserveMinutes}
-                onChange={(e) => setReserveMinutes(parseInt(e.target.value) || 0)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
-              />
-            </div>
+          <div className="av-page-actions">
+            <button onClick={() => { setStorageError(''); setShowLoadModal(true); }} className="av-plan-button">Load plan</button>
+            <button onClick={() => { setStorageError(''); setShowSaveModal(true); }} className="av-plan-button av-plan-button--primary">Save plan</button>
+            <button onClick={() => setShowPrintView(true)} disabled={legs.length === 0} className="av-plan-button" aria-label="Preview printable navigation log">Print</button>
           </div>
-        </div>
+        </header>
 
-        {/* Waypoints */}
-        <div className="bg-slate-800/50 rounded-lg p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
-            <h2 className="text-sm font-medium text-slate-400">Waypoints / Legs</h2>
-            <button
-              onClick={addWaypoint}
-              className="w-full sm:w-auto px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
-            >
-              + Add Waypoint
-            </button>
+        <div className="av-plan-workspace">
+          <div className="av-plan-intro">
+            <p><strong>A manually entered navigation log.</strong> Enter your own distances, courses and winds. This planner does not generate or validate a geographical route.</p>
+            <p>Edits are not saved automatically. Save a named copy when you are ready.</p>
+          </div>
+          <p className="av-plan-status" role="status">{planStatus}</p>
+
+          <div className="av-plan-setup">
+            <section className="av-plan-panel" aria-labelledby="plan-route-title">
+              <SectionHeading number="01" id="plan-route-title" title="Route" description="Name the endpoints of your plan." />
+              <div className="av-plan-fields">
+                <label className="av-plan-field">
+                  <span>Departure</span>
+                  <input aria-label="Departure" type="text" value={departure} onChange={e => setDeparture(e.target.value.toUpperCase())} placeholder="e.g. KJFK" autoCapitalize="characters" spellCheck={false} />
+                </label>
+                <label className="av-plan-field">
+                  <span>Destination</span>
+                  <input aria-label="Destination" type="text" value={destination} onChange={e => setDestination(e.target.value.toUpperCase())} placeholder="e.g. KBOS" autoCapitalize="characters" spellCheck={false} />
+                </label>
+                <label className="av-plan-field">
+                  <span>Mag variation <small>°</small></span>
+                  <input aria-label="Mag Variation" aria-describedby="plan-variation-help" type="number" value={magneticVariation} onChange={e => setMagneticVariation(parseFloat(e.target.value) || 0)} step="0.5" />
+                  <span id="plan-variation-help" className="av-plan-hint">West = negative</span>
+                </label>
+                <label className="av-plan-field">
+                  <span>Date</span>
+                  <input aria-label="Date" type="date" defaultValue={new Date().toISOString().split('T')[0]} />
+                </label>
+              </div>
+              <p className="av-plan-footnote">Date and magnetic variation are not saved with plans. The printed log uses today’s date.</p>
+            </section>
+
+            <section className="av-plan-panel" aria-labelledby="plan-aircraft-title">
+              <SectionHeading number="02" id="plan-aircraft-title" title="Aircraft assumptions" description="Use verified figures for the aircraft you will fly." />
+              <p className="av-plan-caution">Starting values are placeholders, not aircraft-specific data. Enter verified performance and fuel figures.</p>
+              <div className="av-plan-fields">
+                <label className="av-plan-field">
+                  <span>True airspeed <small>kt</small></span>
+                  <input aria-label="True airspeed (TAS, kt)" type="number" value={tas} onChange={e => setTas(parseFloat(e.target.value) || 0)} />
+                </label>
+                <label className="av-plan-field">
+                  <span>Fuel burn <small>gal/hr</small></span>
+                  <input aria-label="Fuel Burn (gal/hr)" type="number" value={fuelBurnRate} onChange={e => setFuelBurnRate(parseFloat(e.target.value) || 0)} step="0.5" />
+                </label>
+                <label className="av-plan-field">
+                  <span>Fuel onboard <small>gal</small></span>
+                  <input aria-label="Fuel Onboard (gal)" type="number" value={fuelOnboard} onChange={e => setFuelOnboard(parseFloat(e.target.value) || 0)} />
+                </label>
+                <label className="av-plan-field">
+                  <span>Reserve <small>min</small></span>
+                  <input aria-label="Reserve (min)" type="number" value={reserveMinutes} onChange={e => setReserveMinutes(parseInt(e.target.value) || 0)} />
+                </label>
+              </div>
+            </section>
           </div>
 
-          {/* Table header */}
-          <div className="hidden sm:grid sm:grid-cols-12 gap-2 mb-2 text-xs text-slate-500 px-1">
-            <div className="col-span-2">Waypoint</div>
-            <div>Dist (nm)</div>
-            <div>TC (°)</div>
-            <div>Alt (ft)</div>
-            <div>Wind Dir</div>
-            <div>Wind Spd</div>
-            <div>TH</div>
-            <div>GS</div>
-            <div>ETE</div>
-            <div>Fuel</div>
-            <div></div>
-          </div>
+          <div className="av-plan-detail-layout">
+            <section className="av-plan-panel av-plan-legs" aria-labelledby="plan-legs-title">
+              <div className="av-plan-section-bar">
+                <SectionHeading number="03" id="plan-legs-title" title="Waypoints & legs" description="Each distance runs from the previous point to this waypoint." />
+                <span className="av-plan-count">{waypoints.length} {waypoints.length === 1 ? 'leg' : 'legs'}</span>
+              </div>
+              <p className="av-plan-footnote av-plan-leg-note">Course and wind direction are true degrees. Zero wind speed assumes calm conditions; winds are not fetched automatically.</p>
+              <div className="av-plan-leg-list">
+                {waypoints.map((wp, index) => {
+                  const leg = legs.find(l => l.waypoint.id === wp.id);
+                  return (
+                    <article key={wp.id} className="av-plan-leg" aria-labelledby={`plan-leg-${index + 1}`}>
+                      <div className="av-plan-leg-header">
+                        <h3 id={`plan-leg-${index + 1}`}>Leg {index + 1}<span>{wp.name || 'New waypoint'}</span></h3>
+                        {waypoints.length > 1 && <button aria-label={`Remove leg ${index + 1}`} onClick={() => removeWaypoint(wp.id)} className="av-plan-button av-plan-button--quiet">Remove</button>}
+                      </div>
+                      <div className="av-plan-fields av-plan-leg-fields">
+                        <label className="av-plan-field av-plan-waypoint-field">
+                          <span>Waypoint name</span>
+                          <input type="text" aria-label={`Leg ${index + 1}: Waypoint name`} value={wp.name} onChange={e => updateWaypoint(wp.id, 'name', e.target.value.toUpperCase())} placeholder={`WPT ${index + 1}`} autoCapitalize="characters" spellCheck={false} />
+                        </label>
+                        <label className="av-plan-field">
+                          <span>Distance <small>nm</small></span>
+                          <input type="number" aria-label={`Leg ${index + 1}: Distance in nautical miles`} value={wp.distance || ''} onChange={e => updateWaypoint(wp.id, 'distance', e.target.value)} placeholder="Enter distance" min="0" />
+                        </label>
+                        <label className="av-plan-field">
+                          <span>True course <small>°</small></span>
+                          <input type="number" aria-label={`Leg ${index + 1}: True course in degrees`} value={wp.trueCourse} onChange={e => updateWaypoint(wp.id, 'trueCourse', e.target.value)} min="0" max="360" />
+                        </label>
+                        <label className="av-plan-field">
+                          <span>Altitude <small>ft</small></span>
+                          <input type="number" aria-label={`Leg ${index + 1}: Altitude in feet`} value={wp.altitude || ''} onChange={e => updateWaypoint(wp.id, 'altitude', e.target.value)} placeholder="Enter altitude" step="500" />
+                        </label>
+                        <label className="av-plan-field">
+                          <span>Wind direction <small>°</small></span>
+                          <input type="number" aria-label={`Leg ${index + 1}: Wind direction in degrees`} value={wp.windDirection} onChange={e => updateWaypoint(wp.id, 'windDirection', e.target.value)} min="0" max="360" />
+                        </label>
+                        <label className="av-plan-field">
+                          <span>Wind speed <small>kt</small></span>
+                          <input type="number" aria-label={`Leg ${index + 1}: Wind speed in knots`} value={wp.windSpeed} onChange={e => updateWaypoint(wp.id, 'windSpeed', e.target.value)} min="0" />
+                        </label>
+                      </div>
+                      {leg ? (
+                        <div className="av-plan-leg-results" role="group" aria-label={`Leg ${index + 1} calculated results`}>
+                          <p className="av-plan-result-caption">Calculated from your inputs</p>
+                          <dl className="av-plan-metrics">
+                            <div><dt>True heading</dt><dd>{Math.round(leg.trueHeading)}°</dd></div>
+                            <div><dt>Groundspeed</dt><dd>{leg.groundSpeed} <small>kt</small></dd></div>
+                            <div><dt>Leg time <span>(h:mm)</span></dt><dd>{formatTime(leg.ete)}</dd></div>
+                            <div><dt>Leg fuel</dt><dd>{leg.fuelBurn} <small>gal</small></dd></div>
+                          </dl>
+                        </div>
+                      ) : (
+                        <p className="av-plan-empty-leg">Enter a distance greater than zero to see heading, groundspeed, time and fuel for this leg.</p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              <button onClick={addWaypoint} className="av-plan-button av-plan-add">+ Add waypoint</button>
+            </section>
 
-          {/* Waypoint rows */}
-          <div className="space-y-2">
-            {waypoints.map((wp, index) => {
-              const leg = legs.find(l => l.waypoint.id === wp.id);
-              
-              return (
-                <div key={wp.id} className="bg-slate-700/50 rounded-lg p-3 sm:p-2">
-                  {/* Mobile label */}
-                  <div className="sm:hidden text-xs text-slate-400 mb-2">Leg {index + 1}</div>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-12 gap-2">
-                    {/* Waypoint name */}
-                    <div className="col-span-2">
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">Waypoint</span>
-                      <input
-                        type="text"
-                        aria-label={`Leg ${index + 1}: Waypoint name`}
-                        value={wp.name}
-                        onChange={(e) => updateWaypoint(wp.id, 'name', e.target.value.toUpperCase())}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder={`WPT ${index + 1}`}
-                      />
-                    </div>
-                    
-                    {/* Distance */}
-                    <div>
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">Distance · nm</span>
-                      <input
-                        type="number"
-                        aria-label={`Leg ${index + 1}: Distance in nautical miles`}
-                        value={wp.distance || ''}
-                        onChange={(e) => updateWaypoint(wp.id, 'distance', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder="nm"
-                        min="0"
-                      />
-                    </div>
-                    
-                    {/* True Course */}
-                    <div>
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">True course · °</span>
-                      <input
-                        type="number"
-                        aria-label={`Leg ${index + 1}: True course in degrees`}
-                        value={wp.trueCourse || ''}
-                        onChange={(e) => updateWaypoint(wp.id, 'trueCourse', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder="°"
-                        min="0"
-                        max="360"
-                      />
-                    </div>
-                    
-                    {/* Altitude */}
-                    <div>
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">Altitude · ft</span>
-                      <input
-                        type="number"
-                        aria-label={`Leg ${index + 1}: Altitude in feet`}
-                        value={wp.altitude || ''}
-                        onChange={(e) => updateWaypoint(wp.id, 'altitude', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder="ft"
-                        step="500"
-                      />
-                    </div>
-                    
-                    {/* Wind Direction */}
-                    <div>
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">Wind direction · °</span>
-                      <input
-                        type="number"
-                        aria-label={`Leg ${index + 1}: Wind direction in degrees`}
-                        value={wp.windDirection || ''}
-                        onChange={(e) => updateWaypoint(wp.id, 'windDirection', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder="W/Dir"
-                        min="0"
-                        max="360"
-                      />
-                    </div>
-                    
-                    {/* Wind Speed */}
-                    <div>
-                      <span className="sm:hidden block text-xs text-slate-400 mb-1">Wind speed · kt</span>
-                      <input
-                        type="number"
-                        aria-label={`Leg ${index + 1}: Wind speed in knots`}
-                        value={wp.windSpeed || ''}
-                        onChange={(e) => updateWaypoint(wp.id, 'windSpeed', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1.5 text-white text-sm"
-                        placeholder="W/Spd"
-                        min="0"
-                      />
-                    </div>
-                    
-                    {/* Computed: TH */}
-                    <div className="flex items-center justify-center text-sm font-mono">
-                      {leg ? (
-                        <span className="text-blue-400">{Math.round(leg.trueHeading)}°</span>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </div>
-                    
-                    {/* Computed: GS */}
-                    <div className="flex items-center justify-center text-sm font-mono">
-                      {leg ? (
-                        <span className="text-green-400">{leg.groundSpeed}</span>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </div>
-                    
-                    {/* Computed: ETE */}
-                    <div className="flex items-center justify-center text-sm font-mono">
-                      {leg ? (
-                        <span className="text-white">{formatTime(leg.ete)}</span>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </div>
-                    
-                    {/* Computed: Fuel */}
-                    <div className="flex items-center justify-center text-sm font-mono">
-                      {leg ? (
-                        <span className="text-amber-400">{leg.fuelBurn}g</span>
-                      ) : (
-                        <span className="text-slate-500">--</span>
-                      )}
-                    </div>
-                    
-                    {/* Delete */}
-                    <div className="flex items-center justify-center">
-                      {waypoints.length > 1 && (
-                        <button
-                          aria-label={`Remove leg ${index + 1}`}
-                          onClick={() => removeWaypoint(wp.id)}
-                          className="text-red-400 hover:text-red-300 p-1"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
+            <section className="av-plan-panel av-plan-review" aria-labelledby="plan-review-title">
+              <SectionHeading number="04" id="plan-review-title" title="Review your plan" description="Check the totals before saving or printing." />
+              {totals ? (
+                <>
+                  <p className="av-plan-review-count">{legs.length} of {waypoints.length} {waypoints.length === 1 ? 'leg' : 'legs'} included</p>
+                  {legs.length < waypoints.length && <p className="av-plan-caution">Some legs have no positive distance and are excluded from these totals.</p>}
+                  <dl className="av-plan-review-metrics">
+                    <div><dt>Total distance</dt><dd>{totals.totalDistance} <small>nm</small></dd></div>
+                    <div><dt>Total time <span>(h:mm)</span></dt><dd>{formatTime(totals.totalTime)}</dd></div>
+                    <div><dt>Fuel required <span>including reserve</span></dt><dd>{totals.totalFuelRequired} <small>gal</small></dd></div>
+                    <div><dt>{totals.sufficient ? 'Fuel after trip & reserve' : '⚠️ FUEL SHORTAGE'}</dt><dd className={totals.sufficient ? '' : 'av-plan-shortage'}>{totals.fuelRemaining >= 0 ? '+' : ''}{totals.fuelRemaining} <small>gal</small></dd></div>
+                  </dl>
+                  <dl className="av-plan-breakdown">
+                    <div><dt>Average groundspeed</dt><dd>{totals.avgGroundSpeed} kt</dd></div>
+                    <div><dt>Trip fuel</dt><dd>{totals.totalFuel} gal</dd></div>
+                    <div><dt>Reserve ({reserveMinutes} min)</dt><dd>{totals.reserveFuel} gal</dd></div>
+                    <div><dt>Fuel onboard</dt><dd>{fuelOnboard} gal</dd></div>
+                  </dl>
+                </>
+              ) : (
+                <div className="av-plan-empty-review">
+                  <h3>Your totals will appear here</h3>
+                  <p>Enter a distance for your first leg, then check its course and wind. Time and fuel update as you edit.</p>
                 </div>
-              );
-            })}
+              )}
+              <p className="av-plan-review-safety">Supplemental planning only. Independently verify inputs and calculations. These totals do not establish route safety or regulatory fuel compliance.</p>
+              <button onClick={() => setShowPrintView(true)} disabled={legs.length === 0} className="av-plan-button av-plan-review-print">Preview navigation log</button>
+              {!totals && <p className="av-plan-hint">Add a leg distance to enable print preview.</p>}
+            </section>
           </div>
         </div>
 
-        {/* Summary */}
-        {totals && (
-          <div className={`rounded-lg p-4 ${totals.sufficient ? 'bg-green-900/20 border border-green-700' : 'bg-red-900/20 border border-red-700'}`}>
-            <h2 className="text-sm font-medium text-slate-400 mb-3">Flight Summary</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{totals.totalDistance} nm</p>
-                <p className="text-slate-400 text-sm">Total Distance</p>
+        {showSaveModal && (
+          <PlanDialog title="Save flight plan" onDismiss={() => setShowSaveModal(false)}>
+            <p className="av-plan-dialog-description">Saved in this browser only, not across devices. Each save creates a new named copy.</p>
+            <form onSubmit={event => { event.preventDefault(); handleSave(); }}>
+              <label className="av-plan-field">
+                <span>Plan name</span>
+                <input type="text" aria-label="Plan name" value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g. Weekend navigation practice" autoFocus required />
+              </label>
+              {storageError && <p className="av-plan-caution" role="alert">{storageError}</p>}
+              <div className="av-plan-dialog-actions">
+                <button type="button" onClick={() => setShowSaveModal(false)} className="av-plan-button">Cancel</button>
+                <button type="submit" disabled={!planName.trim()} className="av-plan-button av-plan-button--primary">Save</button>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-white">{formatTime(totals.totalTime)}</p>
-                <p className="text-slate-400 text-sm">Total Time</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-400">{totals.totalFuelRequired} gal</p>
-                <p className="text-slate-400 text-sm">Fuel Required (w/ reserve)</p>
-              </div>
-              <div className="text-center">
-                <p className={`text-2xl font-bold ${totals.sufficient ? 'text-green-400' : 'text-red-400'}`}>
-                  {totals.fuelRemaining >= 0 ? '+' : ''}{totals.fuelRemaining} gal
-                </p>
-                <p className="text-slate-400 text-sm">
-                  {totals.sufficient ? 'Fuel Remaining' : '⚠️ FUEL SHORTAGE'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-700">
-              <div className="text-center text-sm">
-                <span className="text-slate-400">Avg GS: </span>
-                <span className="text-white font-bold">{totals.avgGroundSpeed} kts</span>
-              </div>
-              <div className="text-center text-sm">
-                <span className="text-slate-400">Trip Fuel: </span>
-                <span className="text-white font-bold">{totals.totalFuel} gal</span>
-              </div>
-              <div className="text-center text-sm">
-                <span className="text-slate-400">Reserve: </span>
-                <span className="text-white font-bold">{totals.reserveFuel} gal</span>
-              </div>
-            </div>
-          </div>
+            </form>
+          </PlanDialog>
         )}
-      </div>
-
-      {/* Save Modal */}
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div role="dialog" aria-modal="true" aria-label="Save flight plan" className="bg-slate-800 rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-2">Save Flight Plan</h3>
-            <p className="text-xs text-slate-400 mb-4">Saved in this browser only, not across devices.</p>
-            <input
-              type="text"
-              aria-label="Plan name"
-              value={planName}
-              onChange={(e) => setPlanName(e.target.value)}
-              placeholder="Plan name (e.g. JFK to BOS)"
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white mb-4"
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setShowSaveModal(false)} className="flex-1 px-4 py-2 bg-slate-700 rounded-lg">Cancel</button>
-              <button onClick={handleSave} disabled={!planName.trim()} className="flex-1 px-4 py-2 bg-blue-600 rounded-lg disabled:bg-slate-600">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Load Modal */}
-      {showLoadModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div role="dialog" aria-modal="true" aria-label="Load flight plan" className="bg-slate-800 rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">Load Flight Plan</h3>
+        {showLoadModal && (
+          <PlanDialog title="Load flight plan" onDismiss={() => setShowLoadModal(false)}>
+            <p className="av-plan-dialog-description">Loading replaces the current editor. Save any edits you want to keep first.</p>
             {savedPlans.length === 0 ? (
-              <p className="text-slate-400 text-center py-8">No saved plans</p>
+              <div className="av-plan-empty-review"><h3>No saved plans</h3><p>Save a named plan and it will appear here in this browser.</p></div>
             ) : (
-              <div className="space-y-2">
+              <ul className="av-plan-saved-list">
                 {savedPlans.map(plan => (
-                  <div key={plan.id} className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg">
-                    <button className="text-left flex-1 min-w-0" onClick={() => handleLoad(plan)} aria-label={`Load ${plan.name}`}>
-                      <p className="font-medium">{plan.name}</p>
-                      <p className="text-xs text-slate-400">{plan.departure} → {plan.destination} • {plan.waypoints.length} legs</p>
+                  <li key={plan.id}>
+                    <button className="av-plan-saved-item" onClick={() => handleLoad(plan)} aria-label={`Load ${plan.name}`}>
+                      <strong>{plan.name}</strong>
+                      <span>{plan.departure || 'No departure'} → {plan.destination || 'No destination'} · {plan.waypoints.length} {plan.waypoints.length === 1 ? 'leg' : 'legs'}</span>
+                      <span className="av-plan-saved-action">Load plan →</span>
                     </button>
-                    <button aria-label={`Delete ${plan.name}`} onClick={() => handleDeletePlan(plan.id)} className="text-red-400 hover:text-red-300 p-2">✕</button>
-                  </div>
+                    <button aria-label={`Delete ${plan.name}`} onClick={() => handleDeletePlan(plan.id)} className="av-plan-button av-plan-button--quiet">Delete</button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-            <button onClick={() => setShowLoadModal(false)} className="w-full mt-4 px-4 py-2 bg-slate-700 rounded-lg">Close</button>
-          </div>
-        </div>
-      )}
-    </main>
+            {storageError && <p className="av-plan-caution" role="alert">{storageError}</p>}
+            <button onClick={() => setShowLoadModal(false)} className="av-plan-button av-plan-dialog-close">Close</button>
+          </PlanDialog>
+        )}
+      </main>
     </AppShell>
+  );
+}
+
+function SectionHeading({ number, id, title, description }: { number: string; id: string; title: string; description: string }) {
+  return (
+    <div className="av-plan-section-heading">
+      <span className="av-plan-step" aria-hidden="true">{number}</span>
+      <div><h2 id={id}>{title}</h2><p>{description}</p></div>
+    </div>
+  );
+}
+
+function PlanDialog({ title, onDismiss, children }: { title: string; onDismiss: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const opener = document.activeElement;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
+  return (
+    <dialog onKeyDown={containDialogTab} ref={dialogRef} className="av-plan-dialog" aria-label={title} onCancel={event => { event.preventDefault(); onDismiss(); }}>
+      <h2>{title}</h2>
+      {children}
+    </dialog>
   );
 }
 

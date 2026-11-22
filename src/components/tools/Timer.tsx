@@ -153,21 +153,17 @@ export default function Timer() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Flight Timer</h3>
-        <p className="text-sm text-slate-400">Stopwatch, countdown & Hobbs tracker</p>
-      </div>
-
       {/* Mode Selection */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <div className="grid grid-cols-3 gap-2">
           {[
-            { key: 'stopwatch', label: '⏱️ Stopwatch' },
-            { key: 'countdown', label: '⏳ Countdown' },
-            { key: 'hobbs', label: '✈️ Hobbs' }
+            { key: 'stopwatch', label: 'Stopwatch' },
+            { key: 'countdown', label: 'Countdown' },
+            { key: 'hobbs', label: 'Hobbs' }
           ].map(({ key, label }) => (
             <button
               key={key}
+              aria-pressed={mode === key}
               onClick={() => setMode(key as TimerMode)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 mode === key ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -242,9 +238,9 @@ export default function Timer() {
           {/* Set Time (when not running) */}
           {!countdownRunning && countdownRemaining === 0 && (
             <div className="bg-slate-800/50 rounded-lg p-4">
-              <label className="block text-sm font-medium text-slate-400 mb-3">Set Timer</label>
+              <label htmlFor="av-tools-timer-0" className="block text-sm font-medium text-slate-400 mb-3">Countdown (minutes : seconds)</label>
               <div className="flex items-center justify-center gap-2">
-                <input
+                <input id="av-tools-timer-0" aria-label="Countdown minutes"
                   type="number"
                   value={countdownMinutes}
                   onChange={(e) => setCountdownMinutes(e.target.value)}
@@ -253,7 +249,7 @@ export default function Timer() {
                   max="99"
                 />
                 <span className="text-2xl text-slate-400">:</span>
-                <input
+                <input aria-label="Countdown seconds"
                   type="number"
                   value={countdownSeconds}
                   onChange={(e) => setCountdownSeconds(e.target.value)}
@@ -264,7 +260,7 @@ export default function Timer() {
               </div>
               
               {/* Quick presets */}
-              <div className="flex gap-2 mt-3 justify-center">
+              <div className="av-tools-presets flex gap-2 mt-3 justify-center">
                 {[
                   { label: '1:00', m: '1', s: '00' },
                   { label: '3:00', m: '3', s: '00' },
@@ -345,9 +341,9 @@ export default function Timer() {
             <h4 className="text-sm font-medium text-slate-400 mb-3">Block Times</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Block Out</label>
+                <label htmlFor="av-tools-timer-1" className="block text-xs text-slate-500 mb-1">Block Out</label>
                 <div className="flex gap-2">
-                  <input
+                  <input id="av-tools-timer-1"
                     type="time"
                     value={blockOut}
                     onChange={(e) => setBlockOut(e.target.value)}
@@ -363,9 +359,9 @@ export default function Timer() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Block In</label>
+                <label htmlFor="av-tools-timer-2" className="block text-xs text-slate-500 mb-1">Block In</label>
                 <div className="flex gap-2">
-                  <input
+                  <input id="av-tools-timer-2"
                     type="time"
                     value={blockIn}
                     onChange={(e) => setBlockIn(e.target.value)}
@@ -392,8 +388,8 @@ export default function Timer() {
             <h4 className="text-sm font-medium text-slate-400 mb-3">Hobbs Meter</h4>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Hobbs Start</label>
-                <input
+                <label htmlFor="av-tools-timer-3" className="block text-xs text-slate-500 mb-1">Hobbs start (hours)</label>
+                <input id="av-tools-timer-3"
                   type="number"
                   value={hobbsStart}
                   onChange={(e) => setHobbsStart(e.target.value)}
@@ -403,8 +399,8 @@ export default function Timer() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Hobbs End</label>
-                <input
+                <label htmlFor="av-tools-timer-4" className="block text-xs text-slate-500 mb-1">Hobbs end (hours)</label>
+                <input id="av-tools-timer-4"
                   type="number"
                   value={hobbsEnd}
                   onChange={(e) => setHobbsEnd(e.target.value)}
@@ -424,7 +420,7 @@ export default function Timer() {
           {(blockOut && blockIn) || (hobbsStart && hobbsEnd) ? (
             <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
               <h4 className="text-blue-400 font-medium mb-2">Flight Summary</h4>
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="av-tools-result-breakdown grid grid-cols-2 gap-2 text-sm">
                 {blockOut && blockIn && (
                   <div className="flex justify-between">
                     <span className="text-slate-400">Block Time:</span>

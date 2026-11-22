@@ -242,6 +242,9 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
 
   const fltCat = airport.fltCat ?? null;
   const faaId = icaoToFaa(airport.icaoId || '');
+  const observationDate = airport.obsTime == null ? null : new Date(airport.obsTime * 1000);
+  const observationLabel = observationDate && Number.isFinite(observationDate.getTime())
+    ? observationDate.toISOString().replace('T', ' ').replace('.000Z', ' UTC') : 'Not reported';
   const cacheFreshness = getCacheFreshness(briefingCachedAt);
   const cacheTone = cacheFreshness === 'expired'
     ? 'border-red-500/30 bg-red-500/10 text-red-100'
@@ -250,7 +253,7 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
 
   return (
-    <div className="bg-slate-800 md:rounded-lg md:border md:border-slate-700 overflow-hidden">
+    <div className="av-airport-card bg-slate-800 md:rounded-lg md:border md:border-slate-700 overflow-hidden">
       {/* Header */}
       <div className="p-3 sm:p-4 border-b border-slate-700 flex items-start justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -277,6 +280,7 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       {/* Airport name & location */}
       <div className="px-3 sm:px-4 py-2 border-b border-slate-700 bg-slate-800/50">
         <p className="text-slate-300 text-sm">{airport.name || details?.airport?.name || 'Unknown Airport'}</p>
+        <p className="av-observation-time"><strong>Observation:</strong> {observationLabel}<br /><span>Check report age. Retrieval time is not observation time.</span></p>
         <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
           {details?.airport?.municipality && (
             <span>{details.airport.municipality}, {details.airport.iso_region?.split('-')[1]}</span>
@@ -296,22 +300,22 @@ function AirportBriefing({ airport, onClose, activeTab, setActiveTab }: {
       {/* Tabs */}
       <div className="flex border-b border-slate-700 overflow-x-auto">
         <TabButton active={activeTab === 'weather'} onClick={() => setActiveTab('weather')}>
-          ☁️ METAR
+          Conditions
         </TabButton>
         <TabButton active={activeTab === 'taf'} onClick={() => setActiveTab('taf')}>
-          📋 TAF
+          Forecast
         </TabButton>
         <TabButton active={activeTab === 'notams'} onClick={() => setActiveTab('notams')}>
-          ⚠️ NOTAMs
+          NOTAMs
         </TabButton>
         <TabButton active={activeTab === 'info'} onClick={() => setActiveTab('info')}>
-          ℹ️ Info
+          Airport
         </TabButton>
         <TabButton active={activeTab === 'runways'} onClick={() => setActiveTab('runways')}>
-          🛬 Runways
+          Runways
         </TabButton>
         <TabButton active={activeTab === 'frequencies'} onClick={() => setActiveTab('frequencies')}>
-          📻 Freq
+          Frequencies
         </TabButton>
       </div>
 
@@ -755,6 +759,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         'flex-1 px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap',
         active ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'

@@ -328,16 +328,12 @@ export default function HoldingPattern() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Holding Pattern Calculator</h3>
-        <p className="text-sm text-slate-400">Determine entry type and wind corrections</p>
-      </div>
-
       {/* Inputs */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="av-tools-inputs grid grid-cols-2 gap-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Inbound Course (°)</label>
-          <input
+          <label htmlFor="av-tools-holdingpattern-0" className="block text-sm font-medium text-slate-400 mb-2">Inbound Course (°)</label>
+          <input id="av-tools-holdingpattern-0"
             type="number"
             value={inboundCourse}
             onChange={(e) => setInboundCourse(e.target.value)}
@@ -347,8 +343,8 @@ export default function HoldingPattern() {
           />
         </div>
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Your Heading (°)</label>
-          <input
+          <label htmlFor="av-tools-holdingpattern-1" className="block text-sm font-medium text-slate-400 mb-2">Your Heading (°)</label>
+          <input id="av-tools-holdingpattern-1"
             type="number"
             value={aircraftHeading}
             onChange={(e) => setAircraftHeading(e.target.value)}
@@ -364,6 +360,7 @@ export default function HoldingPattern() {
         <label className="block text-sm font-medium text-slate-400 mb-2">Hold Direction</label>
         <div className="flex gap-2">
           <button
+            aria-pressed={holdingDirection === 'right'}
             onClick={() => setHoldingDirection('right')}
             className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
               holdingDirection === 'right' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
@@ -372,6 +369,7 @@ export default function HoldingPattern() {
             ↻ Standard (Right)
           </button>
           <button
+            aria-pressed={holdingDirection === 'left'}
             onClick={() => setHoldingDirection('left')}
             className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
               holdingDirection === 'left' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300'
@@ -426,8 +424,8 @@ export default function HoldingPattern() {
         <h4 className="text-sm font-medium text-slate-400">Wind Correction</h4>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Wind From (°)</label>
-            <input
+            <label htmlFor="av-tools-holdingpattern-2" className="block text-xs text-slate-500 mb-1">Wind From (°)</label>
+            <input id="av-tools-holdingpattern-2"
               type="number"
               value={windDirection}
               onChange={(e) => setWindDirection(e.target.value)}
@@ -437,8 +435,8 @@ export default function HoldingPattern() {
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">Wind Speed (kts)</label>
-            <input
+            <label htmlFor="av-tools-holdingpattern-3" className="block text-xs text-slate-500 mb-1">Wind Speed (kts)</label>
+            <input id="av-tools-holdingpattern-3"
               type="number"
               value={windSpeed}
               onChange={(e) => setWindSpeed(e.target.value)}
@@ -447,8 +445,8 @@ export default function HoldingPattern() {
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500 mb-1">TAS (kts)</label>
-            <input
+            <label htmlFor="av-tools-holdingpattern-4" className="block text-xs text-slate-500 mb-1">True airspeed (knots)</label>
+            <input id="av-tools-holdingpattern-4"
               type="number"
               value={tas}
               onChange={(e) => setTas(e.target.value)}

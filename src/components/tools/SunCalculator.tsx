@@ -224,15 +224,11 @@ export default function SunCalculator() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Sunrise / Sunset Calculator</h3>
-        <p className="text-sm text-slate-400">Calculate sun times and twilight periods for VFR planning</p>
-      </div>
-
+      <h3 className="av-tools-section-title">Date & location</h3>
       {/* Date Input */}
       <div className="bg-slate-800/50 rounded-lg p-4">
-        <label className="block text-sm font-medium text-slate-400 mb-2">Date</label>
-        <input
+        <label htmlFor="av-tools-suncalculator-0" className="block text-sm font-medium text-slate-400 mb-2">Date</label>
+        <input id="av-tools-suncalculator-0"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
@@ -259,8 +255,8 @@ export default function SunCalculator() {
       {/* Manual Location */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Latitude</label>
-          <input
+          <label htmlFor="av-tools-suncalculator-1" className="block text-sm font-medium text-slate-400 mb-2">Latitude (°)</label>
+          <input id="av-tools-suncalculator-1"
             type="number"
             value={latitude}
             onChange={(e) => setLatitude(e.target.value)}
@@ -270,8 +266,8 @@ export default function SunCalculator() {
           />
         </div>
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Longitude</label>
-          <input
+          <label htmlFor="av-tools-suncalculator-2" className="block text-sm font-medium text-slate-400 mb-2">Longitude (°)</label>
+          <input id="av-tools-suncalculator-2"
             type="number"
             value={longitude}
             onChange={(e) => setLongitude(e.target.value)}
@@ -283,8 +279,8 @@ export default function SunCalculator() {
       </div>
 
       <div className="bg-slate-800/50 rounded-lg p-4">
-        <label className="block text-sm font-medium text-slate-400 mb-2">UTC Offset (timezone)</label>
-        <select
+        <label htmlFor="av-tools-suncalculator-3" className="block text-sm font-medium text-slate-400 mb-2">UTC Offset (timezone)</label>
+        <select id="av-tools-suncalculator-3"
           value={timezone}
           onChange={(e) => setTimezone(e.target.value)}
           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white"
@@ -300,6 +296,7 @@ export default function SunCalculator() {
       {/* Results */}
       {result && (
         <div className="space-y-4">
+          <h3 className="av-tools-section-title">Sun & twilight times</h3>
           {/* Main Times */}
           <div className="bg-gradient-to-b from-orange-900/30 via-blue-900/30 to-slate-900/30 border border-slate-700 rounded-lg overflow-hidden">
             {/* Civil Twilight Start */}

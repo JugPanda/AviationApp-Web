@@ -2,58 +2,12 @@
 
 import { useState } from 'react';
 
-interface SearchBarProps {
-  onSearch: (icao: string) => void;
-  isLoading: boolean;
-}
-
+interface SearchBarProps { onSearch: (icao: string) => void; isLoading: boolean; }
 export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
   const [query, setQuery] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) {
-      onSearch(query.trim().toUpperCase());
-      setQuery(''); // Clear after search on mobile
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex gap-1.5 sm:gap-2">
-      <label htmlFor="airport-search" className="sr-only">
-        Search airport by ICAO code
-      </label>
-      <input
-        id="airport-search"
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value.toUpperCase())}
-        placeholder="KJFK, KLAX, KATL..."
-        className="flex-1 min-w-0 px-3 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm sm:text-base"
-        maxLength={4}
-        title="Enter 4-letter ICAO code (e.g., KJFK for JFK Airport)"
-        aria-describedby="airport-search-help"
-      />
-      <span id="airport-search-help" className="sr-only">
-        Enter a four-letter ICAO airport code such as KJFK.
-      </span>
-      <button
-        type="submit"
-        disabled={isLoading || !query.trim()}
-        className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors text-sm sm:text-base flex-shrink-0"
-        aria-label={isLoading ? 'Searching airport' : 'Search airport by ICAO code'}
-        title="Search airport by ICAO code"
-      >
-        {isLoading ? (
-          <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        ) : (
-          <span className="sm:hidden">→</span>
-        )}
-        <span className="hidden sm:inline">Search</span>
-      </button>
-    </form>
-  );
+  return <form className="av-airport-search" onSubmit={event => { event.preventDefault(); if(query.trim()) onSearch(query.trim().toUpperCase()); }}>
+    <label htmlFor="airport-search">Search airport by ICAO code</label>
+    <div><input id="airport-search" type="text" value={query} onChange={event => setQuery(event.target.value.toUpperCase())} placeholder="e.g. KLOU" maxLength={4} autoCapitalize="characters" autoComplete="off" spellCheck={false} aria-describedby="airport-search-help" /><button type="submit" disabled={isLoading || !query.trim()}>{isLoading ? 'Loading…' : 'Search'}</button></div>
+    <span id="airport-search-help">Use the four-letter identifier. Open a map marker for its report.</span>
+  </form>;
 }

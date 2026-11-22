@@ -181,7 +181,7 @@ describe('airport briefing cache initialization', () => {
     const airport = (icaoId: string) => ({ icaoId, lat: 0, lon: 0 });
     await render(createElement(AirportInfo, { airport: airport('KAAA'), onClose: vi.fn() }));
     expect(container.textContent).toContain('First town');
-    await act(async () => buttonContaining('TAF').click());
+    await act(async () => buttonContaining('Forecast').click());
     expect(container.textContent).toContain('KAAA CACHED TAF');
     await render(createElement(AirportInfo, { airport: airport('KBBB'), onClose: vi.fn() }));
     expect(container.textContent).toContain('Second town');

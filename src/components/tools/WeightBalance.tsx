@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useId } from 'react';
+import { containDialogTab } from '@/lib/dialog-focus';
+
+import { useState, useEffect, useMemo, useCallback, useId, useRef } from 'react';
 import {
   AircraftProfile,
   CustomAircraft,
@@ -169,34 +171,39 @@ function getStoredPreferences(aircraftId: string, aircraft: AircraftData): Weigh
   }
 }
 
-// Modal Component
+// Native modal semantics keep focus inside the dialog and restore it on close.
 function Modal({ isOpen, onClose, title, children }: {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
 }) {
-  if (!isOpen) return null;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (isOpen && !dialog.open) dialog.showModal();
+    if (!isOpen && dialog.open) dialog.close();
+  }, [isOpen]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <button
-            onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <dialog
+      ref={dialogRef}
+      onKeyDown={containDialogTab}
+      className="av-tools-dialog"
+      aria-labelledby={titleId}
+      onCancel={event => { event.preventDefault(); onClose(); }}
+    >
+      {isOpen && <>
+        <div className="av-tools-dialog-heading">
+          <h3 id={titleId}>{title}</h3>
+          <button type="button" onClick={onClose} aria-label={`Close ${title}`} className="px-3 text-slate-400">✕</button>
         </div>
-        <div className="p-4 overflow-y-auto max-h-[calc(90vh-60px)]">
-          {children}
-        </div>
-      </div>
-    </div>
+        <div className="av-tools-dialog-content">{children}</div>
+      </>}
+    </dialog>
   );
 }
 
@@ -278,7 +285,7 @@ function EnvelopeChart({ envelope, calculations }: { envelope: CGEnvelope; calcu
   const cgY = scaleY(Math.min(calculations.totalWeight, maxWeight));
 
   return (
-    <svg width={width} height={height} className="mx-auto">
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="av-tools-envelope-chart mx-auto">
       <defs>
         <pattern id={patternId} width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#334155" strokeWidth="0.5" />
@@ -543,8 +550,10 @@ export default function WeightBalance() {
         </p>
       </aside>
       {/* Profile Quick Actions */}
-      <div className="flex flex-wrap gap-2">
-        <select
+      <div className="av-tools-profile-actions">
+        <div>
+        <label htmlFor="av-tools-profile">Saved aircraft profiles</label>
+        <select id="av-tools-profile"
           value={selectedProfile}
           onChange={(e) => handleLoadProfile(e.target.value)}
           className="w-full sm:flex-1 sm:min-w-[140px] bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -556,6 +565,7 @@ export default function WeightBalance() {
             </option>
           ))}
         </select>
+        </div>
         
         <button
           onClick={() => {
@@ -568,22 +578,24 @@ export default function WeightBalance() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
           </svg>
-          Save
+          Save profile
         </button>
         
         <button
           onClick={() => setShowManageModal(true)}
           className="flex-1 sm:flex-none px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
         >
-          Manage
+          Manage profiles
         </button>
       </div>
 
       {/* Aircraft Selection */}
+      <div className="av-tools-inputs space-y-6">
+      <h3 className="av-tools-section-title">Loading inputs</h3>
       <div>
-        <label className="block text-sm font-medium text-slate-400 mb-2">Aircraft Type</label>
+        <label htmlFor="av-tools-wb-0" className="block text-sm font-medium text-slate-400 mb-2">Aircraft Type</label>
         <div className="flex gap-2">
-          <select
+          <select id="av-tools-wb-0"
             value={selectedAircraft}
             onChange={(e) => {
               applyAircraftSelection(e.target.value);
@@ -610,6 +622,7 @@ export default function WeightBalance() {
           <button
             onClick={() => setShowCustomAircraftModal(true)}
             className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            aria-label="Add custom aircraft"
             title="Add Custom Aircraft"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -621,10 +634,10 @@ export default function WeightBalance() {
 
       {/* Fuel Input */}
       <div>
-        <label className="block text-sm font-medium text-slate-400 mb-2">
+        <label htmlFor="av-tools-wb-1" className="block text-sm font-medium text-slate-400 mb-2">
           Fuel ({fuelGallons} gal = {(fuelGallons * aircraft.fuelWeight).toFixed(0)} lbs)
         </label>
-        <input
+        <input id="av-tools-wb-1"
           type="range"
           min="0"
           max={aircraft.fuelCapacity}
@@ -644,8 +657,8 @@ export default function WeightBalance() {
         <label className="block text-sm font-medium text-slate-400">Payload</label>
         {aircraft.stations.map((station, index) => (
           <div key={index} className="flex items-center gap-3">
-            <label className="text-sm text-slate-300 flex-1">{station.name}</label>
-            <input
+            <label htmlFor={`av-tools-payload-${index}`} className="text-sm text-slate-300 flex-1">{station.name} (lbs)</label>
+            <input id={`av-tools-payload-${index}`}
               type="number"
               value={stationWeights[index]?.weight || 0}
               onChange={(e) => updateStationWeight(index, Number(e.target.value))}
@@ -658,9 +671,12 @@ export default function WeightBalance() {
         ))}
       </div>
 
+      </div>
+
       {/* Results */}
       {calculations && (
         <div className="space-y-4">
+          <h3 className="av-tools-section-title">Loading results</h3>
           {/* CG Envelope Chart */}
           <div className="bg-slate-800/50 rounded-lg p-4">
             <h4 className="text-sm font-medium text-slate-400 mb-3 text-center">CG Envelope — selected data, unverified</h4>
@@ -668,14 +684,15 @@ export default function WeightBalance() {
           </div>
 
           {/* Summary Table */}
-          <div className="bg-slate-800/50 rounded-lg overflow-hidden">
+          <div className="av-tools-table bg-slate-800/50 rounded-lg" tabIndex={0} role="region" aria-label="Weight and balance breakdown, scroll horizontally on small screens">
             <table className="w-full text-sm">
+              <caption className="sr-only">Loading breakdown: weight in pounds, arm in inches, moment in pound-inches</caption>
               <thead>
                 <tr className="bg-slate-800">
                   <th className="text-left px-4 py-2 text-slate-400">Item</th>
-                  <th className="text-right px-4 py-2 text-slate-400">Weight</th>
-                  <th className="text-right px-4 py-2 text-slate-400">Arm</th>
-                  <th className="text-right px-4 py-2 text-slate-400">Moment</th>
+                  <th className="text-right px-4 py-2 text-slate-400">Weight (lb)</th>
+                  <th className="text-right px-4 py-2 text-slate-400">Arm (in)</th>
+                  <th className="text-right px-4 py-2 text-slate-400">Moment (lb·in)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700">
@@ -760,8 +777,8 @@ export default function WeightBalance() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Profile Name</label>
-            <input
+            <label htmlFor="av-tools-wb-3" className="block text-sm font-medium text-slate-400 mb-2">Profile Name</label>
+            <input id="av-tools-wb-3"
               type="text"
               value={profileName}
               onChange={(e) => setProfileName(e.target.value)}
@@ -895,8 +912,8 @@ export default function WeightBalance() {
           </div>
           
           <div className="border-t border-slate-700 pt-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Import JSON</label>
-            <textarea
+            <label htmlFor="av-tools-wb-4" className="block text-sm font-medium text-slate-400 mb-2">Import JSON</label>
+            <textarea id="av-tools-wb-4"
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               placeholder="Paste exported JSON here..."
@@ -921,8 +938,8 @@ export default function WeightBalance() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Aircraft Name</label>
-            <input
+            <label htmlFor="av-tools-wb-5" className="block text-sm font-medium text-slate-400 mb-1">Aircraft Name</label>
+            <input id="av-tools-wb-5"
               type="text"
               value={customAircraftForm.name}
               onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, name: e.target.value })}
@@ -933,8 +950,8 @@ export default function WeightBalance() {
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Empty Weight (lbs)</label>
-              <input
+              <label htmlFor="av-tools-wb-6" className="block text-xs font-medium text-slate-400 mb-1">Empty Weight (lbs)</label>
+              <input id="av-tools-wb-6"
                 type="number"
                 value={customAircraftForm.emptyWeight}
                 onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, emptyWeight: Number(e.target.value) })}
@@ -942,8 +959,8 @@ export default function WeightBalance() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Empty Arm (in)</label>
-              <input
+              <label htmlFor="av-tools-wb-7" className="block text-xs font-medium text-slate-400 mb-1">Empty Arm (in)</label>
+              <input id="av-tools-wb-7"
                 type="number"
                 step="0.1"
                 value={customAircraftForm.emptyArm}
@@ -952,8 +969,8 @@ export default function WeightBalance() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Max Gross (lbs)</label>
-              <input
+              <label htmlFor="av-tools-wb-8" className="block text-xs font-medium text-slate-400 mb-1">Max Gross (lbs)</label>
+              <input id="av-tools-wb-8"
                 type="number"
                 value={customAircraftForm.maxGross}
                 onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, maxGross: Number(e.target.value) })}
@@ -961,8 +978,8 @@ export default function WeightBalance() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Capacity (gal)</label>
-              <input
+              <label htmlFor="av-tools-wb-9" className="block text-xs font-medium text-slate-400 mb-1">Fuel Capacity (gal)</label>
+              <input id="av-tools-wb-9"
                 type="number"
                 value={customAircraftForm.fuelCapacity}
                 onChange={(e) => setCustomAircraftForm({ ...customAircraftForm, fuelCapacity: Number(e.target.value) })}
@@ -970,8 +987,8 @@ export default function WeightBalance() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Arm (in)</label>
-              <input
+              <label htmlFor="av-tools-wb-10" className="block text-xs font-medium text-slate-400 mb-1">Fuel Arm (in)</label>
+              <input id="av-tools-wb-10"
                 type="number"
                 step="0.1"
                 value={customAircraftForm.fuelArm}
@@ -980,8 +997,8 @@ export default function WeightBalance() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Fuel Weight (lb/gal)</label>
-              <input
+              <label htmlFor="av-tools-wb-11" className="block text-xs font-medium text-slate-400 mb-1">Fuel Weight (lb/gal)</label>
+              <input id="av-tools-wb-11"
                 type="number"
                 step="0.1"
                 value={customAircraftForm.fuelWeight}
@@ -993,7 +1010,7 @@ export default function WeightBalance() {
           
           <div className="border-t border-slate-700 pt-3">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-slate-400">Stations</label>
+              <p className="text-sm font-medium text-slate-400">Payload stations</p>
               <button
                 onClick={() => setCustomAircraftForm({
                   ...customAircraftForm,
@@ -1004,10 +1021,11 @@ export default function WeightBalance() {
                 + Add Station
               </button>
             </div>
+            <p className="text-xs text-slate-400 mb-2">Name · Arm (inches) · Maximum weight (lbs)</p>
             <div className="space-y-2 max-h-40 overflow-y-auto">
               {customAircraftForm.stations.map((station, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input
+                <div key={i} className="av-tools-custom-row">
+                  <input aria-label={`Station ${i + 1} name`}
                     type="text"
                     value={station.name}
                     onChange={(e) => {
@@ -1018,7 +1036,7 @@ export default function WeightBalance() {
                     className="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
                     placeholder="Name"
                   />
-                  <input
+                  <input aria-label={`Station ${i + 1} arm (inches)`}
                     type="number"
                     step="0.1"
                     value={station.arm}
@@ -1030,7 +1048,7 @@ export default function WeightBalance() {
                     className="w-16 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white text-xs"
                     placeholder="Arm"
                   />
-                  <input
+                  <input aria-label={`Station ${i + 1} maximum weight (lbs)`}
                     type="number"
                     value={station.maxWeight || 200}
                     onChange={(e) => {
@@ -1042,7 +1060,7 @@ export default function WeightBalance() {
                     placeholder="Max"
                   />
                   {customAircraftForm.stations.length > 1 && (
-                    <button
+                    <button aria-label={`Remove station ${i + 1}`}
                       onClick={() => {
                         const newStations = customAircraftForm.stations.filter((_, idx) => idx !== i);
                         setCustomAircraftForm({ ...customAircraftForm, stations: newStations });
@@ -1061,10 +1079,11 @@ export default function WeightBalance() {
           
           <div className="border-t border-slate-700 pt-3">
             <label className="text-sm font-medium text-slate-400 mb-2 block">CG Envelope (Forward/Aft Limits)</label>
+            <p className="text-xs text-slate-400 mb-2">Weight (lbs) · Forward limit (inches) · Aft limit (inches)</p>
             <div className="space-y-2 max-h-32 overflow-y-auto">
               {customAircraftForm.envelope.points.map((point, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input
+                <div key={i} className="av-tools-envelope-row flex gap-2 items-center">
+                  <input aria-label={`Envelope point ${i + 1} weight (lbs)`}
                     type="number"
                     value={point.weight}
                     onChange={(e) => {
@@ -1076,7 +1095,7 @@ export default function WeightBalance() {
                     placeholder="Weight"
                   />
                   <span className="text-slate-500 text-xs">lbs @</span>
-                  <input
+                  <input aria-label={`Envelope point ${i + 1} forward limit (inches)`}
                     type="number"
                     step="0.1"
                     value={point.cgMin}
@@ -1089,7 +1108,7 @@ export default function WeightBalance() {
                     placeholder="Fwd"
                   />
                   <span className="text-slate-500 text-xs">-</span>
-                  <input
+                  <input aria-label={`Envelope point ${i + 1} aft limit (inches)`}
                     type="number"
                     step="0.1"
                     value={point.cgMax}
@@ -1103,7 +1122,7 @@ export default function WeightBalance() {
                   />
                   <span className="text-slate-500 text-xs">in</span>
                   {customAircraftForm.envelope.points.length > 2 && (
-                    <button
+                    <button aria-label={`Remove envelope point ${i + 1}`}
                       onClick={() => {
                         const newPoints = customAircraftForm.envelope.points.filter((_, idx) => idx !== i);
                         setCustomAircraftForm({ ...customAircraftForm, envelope: { points: newPoints } });

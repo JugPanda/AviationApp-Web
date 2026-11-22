@@ -127,7 +127,7 @@ test("landing CTAs enter workspace and return; FAQ works by keyboard", async ({
     .first()
     .click();
   await expect(page).toHaveURL(/\/map$/);
-  await page.getByRole("link", { name: "AV Weather — back to home" }).click();
+  await page.getByRole("link", { name: "AV Weather Pilot workspace — back to home" }).click();
   await expect(page.locator("h1")).toContainText("Your preflight workspace.");
 });
 
@@ -194,9 +194,11 @@ test("real METAR search opens airport detail; traffic and radar remain gated", a
     page.getByRole("dialog", { name: "Airport briefing for KLOU" }),
   ).toBeVisible({ timeout: 25000 });
   await page.getByRole("button", { name: /close airport/i }).click();
+  await page.getByRole("button", { name: /^Weather layers/ }).click();
   await page.getByRole("button", { name: "Flights", exact: true }).click();
-  await expect(page.getByText(/Flight traffic is held pending/)).toBeVisible();
+  await expect(page.getByText(/Traffic remains unavailable until provider permissions/)).toBeVisible();
   await page.getByRole("button", { name: "Radar", exact: true }).click();
+  await page.getByRole("button", { name: "Close map layers" }).click();
   await expect(page.getByText(/licensing pending/i)).toBeVisible();
   expect(forbidden).toEqual([]);
   const traffic = await request.get("/api/flights?query=N12345");

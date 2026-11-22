@@ -12,197 +12,109 @@ import AltitudeCalculator from '@/components/tools/AltitudeCalculator';
 import SunCalculator from '@/components/tools/SunCalculator';
 import Timer from '@/components/tools/Timer';
 import HoldingPattern from '@/components/tools/HoldingPattern';
+import './tools.css';
 
-type Tool = 
-  | 'weight-balance' 
-  | 'density-altitude' 
-  | 'crosswind'
-  | 'time-speed-distance'
-  | 'fuel'
-  | 'wind'
-  | 'altitude'
-  | 'sun'
-  | 'timer'
-  | 'holding';
+type Tool = 'weight-balance' | 'density-altitude' | 'crosswind' | 'time-speed-distance' | 'fuel' | 'wind' | 'altitude' | 'sun' | 'timer' | 'holding';
+type Category = 'performance' | 'planning' | 'utility';
 
 interface ToolConfig {
   id: Tool;
-  icon: string;
   label: string;
-  shortLabel: string;
-  category: 'flight' | 'performance' | 'planning' | 'utility';
+  category: Category;
+  help: string;
 }
 
 const TOOLS: ToolConfig[] = [
-  // Flight Planning
-  { id: 'time-speed-distance', icon: '📏', label: 'Time/Speed/Distance', shortLabel: 'T/S/D', category: 'flight' },
-  { id: 'fuel', icon: '⛽', label: 'Fuel Calculator', shortLabel: 'Fuel', category: 'flight' },
-  { id: 'wind', icon: '💨', label: 'Wind Correction', shortLabel: 'Wind', category: 'flight' },
-  { id: 'sun', icon: '🌅', label: 'Sunrise/Sunset', shortLabel: 'Sun', category: 'flight' },
-  
-  // Performance
-  { id: 'weight-balance', icon: '⚖️', label: 'Weight & Balance', shortLabel: 'W&B', category: 'performance' },
-  { id: 'density-altitude', icon: '🏔️', label: 'Density Altitude', shortLabel: 'DA', category: 'performance' },
-  { id: 'altitude', icon: '📊', label: 'Altitude & TAS', shortLabel: 'Alt/TAS', category: 'performance' },
-  { id: 'crosswind', icon: '🌬️', label: 'Crosswind', shortLabel: 'Xwind', category: 'performance' },
-  
-  // Utility
-  { id: 'timer', icon: '⏱️', label: 'Timer & Hobbs', shortLabel: 'Timer', category: 'utility' },
-  
-  // IFR
-  { id: 'holding', icon: '🔄', label: 'Holding Pattern', shortLabel: 'Hold', category: 'flight' },
+  { id: 'weight-balance', label: 'Weight & Balance', category: 'performance', help: 'Set aircraft, fuel, and payload. Compare the calculated loading with the selected, unverified limits.' },
+  { id: 'density-altitude', label: 'Density Altitude', category: 'performance', help: 'Enter field conditions to estimate density altitude. Use your aircraft’s POH for performance planning.' },
+  { id: 'altitude', label: 'Altitude & Airspeed', category: 'performance', help: 'Compare pressure, density, and true altitude, or estimate true airspeed from your flight conditions.' },
+  { id: 'crosswind', label: 'Crosswind', category: 'performance', help: 'Resolve wind into runway components. Use the same heading reference for the runway and wind direction.' },
+  { id: 'time-speed-distance', label: 'Time / Speed / Distance', category: 'planning', help: 'Choose the value to solve for, then enter the other two. Check the units beside each input.' },
+  { id: 'fuel', label: 'Fuel Calculator', category: 'planning', help: 'Estimate endurance or fuel required using your burn rate and reserve. Verify fuel and performance against your aircraft documentation.' },
+  { id: 'wind', label: 'Wind Correction', category: 'planning', help: 'Enter true course, true airspeed, and wind to calculate a corrected heading and ground speed.' },
+  { id: 'sun', label: 'Sunrise / Sunset', category: 'planning', help: 'Choose a date and location to estimate sun and twilight times. Adjust the UTC offset for daylight saving when needed.' },
+  { id: 'holding', label: 'Holding Pattern', category: 'planning', help: 'Review a holding entry and wind corrections. Confirm the course and turn direction against your clearance.' },
+  { id: 'timer', label: 'Timer & Hobbs', category: 'utility', help: 'Use a stopwatch or countdown, or calculate block and Hobbs time. Keep this tool open while timing.' },
 ];
 
-const CATEGORIES = {
-  flight: { label: 'Flight Planning', color: 'blue' },
-  performance: { label: 'Performance', color: 'green' },
-  utility: { label: 'Utility', color: 'amber' },
-};
+const CATEGORIES: { id: Category; label: string }[] = [
+  { id: 'performance', label: 'Aircraft & performance' },
+  { id: 'planning', label: 'Flight planning' },
+  { id: 'utility', label: 'Time & records' },
+];
 
 export default function ToolsPage() {
   const [activeTool, setActiveTool] = useState<Tool>('weight-balance');
-  const [showToolList, setShowToolList] = useState(false);
-
-  const currentTool = TOOLS.find(t => t.id === activeTool)!;
+  const currentTool = TOOLS.find(tool => tool.id === activeTool)!;
 
   return (
     <AppShell>
-    <main id="workspace-content" tabIndex={-1} className="min-h-screen bg-slate-950 text-white">
-      <header className="av-page-heading">
-        <div>
-          <p className="av-eyebrow">03 / The instrument desk</p>
-          <h1>Pilot tools</h1>
-          <p className="av-page-description">Planning calculations, performance references, and cockpit utilities.</p>
-          <p className="av-local-note">Aircraft profiles are local to this browser. Verify inputs against your aircraft documentation.</p>
-        </div>
-        <button onClick={() => setShowToolList(!showToolList)} aria-expanded={showToolList} aria-controls="mobile-tool-list" aria-label={`Choose tool. Current tool: ${currentTool.label}`} className="sm:hidden flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-lg text-sm">
-          <span aria-hidden="true">{currentTool.icon}</span>
-          <span>{currentTool.shortLabel}</span>
-          <span className="text-slate-400">Change tool ↓</span>
-        </button>
-      </header>
+      <main id="workspace-content" tabIndex={-1} className="av-tools-page min-h-screen bg-slate-950 text-white">
+        <header className="av-page-heading">
+          <div>
+            <p className="av-eyebrow">03 / The instrument desk</p>
+            <h1>Pilot tools</h1>
+            <p className="av-page-description">Planning calculations, performance references, and cockpit utilities.</p>
+            <p className="av-local-note">Aircraft profiles stay in this browser. Verify inputs against your aircraft documentation.</p>
+          </div>
+        </header>
 
-      {/* Mobile Tool List Dropdown */}
-      {showToolList && (
-        <>
-          <div 
-            className="sm:hidden fixed inset-0 bg-black/50 z-40"
-            onClick={() => setShowToolList(false)}
-          />
-          <div id="mobile-tool-list" className="av-tool-menu sm:hidden" role="dialog" aria-modal="true" aria-label="Choose a pilot tool" onKeyDown={(event) => { if (event.key === 'Escape') setShowToolList(false); }}>
-            <div className="av-tool-menu-heading"><h2 className="font-semibold">Choose a tool</h2><button onClick={() => setShowToolList(false)} className="px-3 text-sm">Close</button></div>
-            {Object.entries(CATEGORIES).map(([catKey, catConfig]) => (
-              <div key={catKey}>
-                <div className="px-4 py-2 bg-slate-800/50 text-xs font-medium text-slate-400">
-                  {catConfig.label}
-                </div>
-                {TOOLS.filter(t => t.category === catKey).map(tool => (
+        <div className="av-tools-workspace">
+          <nav className="av-tools-sidebar" aria-label="Pilot tools">
+            <p className="av-tools-nav-heading">Tool directory <span>10 tools</span></p>
+            {CATEGORIES.map(category => (
+              <div className="av-tools-nav-group" key={category.id}>
+                <h2>{category.label}</h2>
+                {TOOLS.filter(tool => tool.category === category.id).map(tool => (
                   <button
                     key={tool.id}
+                    type="button"
                     aria-pressed={activeTool === tool.id}
-                    onClick={() => {
-                      setActiveTool(tool.id);
-                      setShowToolList(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
-                      activeTool === tool.id 
-                        ? 'bg-blue-900/30 text-blue-400' 
-                        : 'text-slate-300 hover:bg-slate-800'
-                    }`}
+                    aria-controls="selected-tool"
+                    onClick={() => setActiveTool(tool.id)}
                   >
-                    <span className="text-xl">{tool.icon}</span>
                     <span>{tool.label}</span>
+                    <span className="av-tools-nav-marker" aria-hidden="true">{activeTool === tool.id ? '→' : '·'}</span>
                   </button>
                 ))}
               </div>
             ))}
+          </nav>
+
+          <div className="av-tools-mobile-selector">
+            <label htmlFor="pilot-tool">Choose a tool <span>10 available</span></label>
+            <select id="pilot-tool" value={activeTool} onChange={event => setActiveTool(event.target.value as Tool)} aria-controls="selected-tool">
+              {CATEGORIES.map(category => (
+                <optgroup key={category.id} label={category.label}>
+                  {TOOLS.filter(tool => tool.category === category.id).map(tool => (
+                    <option key={tool.id} value={tool.id}>{tool.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
-        </>
-      )}
 
-      {/* Desktop Tool Navigation */}
-      <div className="av-subnav hidden sm:block">
-        <div className="flex overflow-x-auto">
-          {TOOLS.map(tool => (
-            <ToolTab 
-              key={tool.id}
-              active={activeTool === tool.id} 
-              onClick={() => setActiveTool(tool.id)}
-              icon={tool.icon}
-              label={tool.shortLabel}
-              fullLabel={tool.label}
-            />
-          ))}
+          <section id="selected-tool" className="av-tools-panel" aria-labelledby="selected-tool-title">
+            <header className="av-tools-panel-heading">
+              <p className="av-tools-category">{CATEGORIES.find(category => category.id === currentTool.category)!.label}</p>
+              <h2 id="selected-tool-title" aria-live="polite" aria-atomic="true">{currentTool.label}</h2>
+              <p>{currentTool.help}</p>
+            </header>
+            <div className="av-tools-calculator max-w-4xl" data-tool={activeTool}>
+              {activeTool === 'weight-balance' && <WeightBalance />}
+              {activeTool === 'density-altitude' && <DensityAltitude />}
+              {activeTool === 'crosswind' && <CrosswindCalculator />}
+              {activeTool === 'time-speed-distance' && <TimeSpeedDistance />}
+              {activeTool === 'fuel' && <FuelCalculator />}
+              {activeTool === 'wind' && <WindCalculator />}
+              {activeTool === 'altitude' && <AltitudeCalculator />}
+              {activeTool === 'sun' && <SunCalculator />}
+              {activeTool === 'timer' && <Timer />}
+              {activeTool === 'holding' && <HoldingPattern />}
+            </div>
+          </section>
         </div>
-      </div>
-
-      {/* Tool Content */}
-      <div className="p-4 max-w-4xl mx-auto pb-20">
-        {activeTool === 'weight-balance' && <WeightBalance />}
-        {activeTool === 'density-altitude' && <DensityAltitude />}
-        {activeTool === 'crosswind' && <CrosswindCalculator />}
-        {activeTool === 'time-speed-distance' && <TimeSpeedDistance />}
-        {activeTool === 'fuel' && <FuelCalculator />}
-        {activeTool === 'wind' && <WindCalculator />}
-        {activeTool === 'altitude' && <AltitudeCalculator />}
-        {activeTool === 'sun' && <SunCalculator />}
-        {activeTool === 'timer' && <Timer />}
-        {activeTool === 'holding' && <HoldingPattern />}
-      </div>
-
-      {/* Quick tool switcher (mobile bottom bar) */}
-      <div className="av-tools-quickbar sm:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 px-2 py-2">
-        <div className="grid grid-cols-4 gap-1">
-          {['weight-balance', 'fuel', 'wind', 'timer'].map(toolId => {
-            const tool = TOOLS.find(t => t.id === toolId)!;
-            return (
-              <button
-                key={toolId}
-                aria-label={tool.label}
-                aria-pressed={activeTool === tool.id}
-                onClick={() => setActiveTool(tool.id)}
-                className={`flex flex-col items-center min-w-0 px-1 py-1 rounded-lg transition-colors ${
-                  activeTool === tool.id ? 'bg-blue-900/30 text-blue-400' : 'text-slate-400'
-                }`}
-              >
-                <span className="text-xl">{tool.icon}</span>
-                <span className="text-[10px]">{tool.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </main>
+      </main>
     </AppShell>
-  );
-}
-
-function ToolTab({ 
-  active, 
-  onClick, 
-  icon, 
-  label,
-  fullLabel
-}: { 
-  active: boolean; 
-  onClick: () => void; 
-  icon: string; 
-  label: string;
-  fullLabel: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={fullLabel}
-      aria-pressed={active}
-      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-        active 
-          ? 'text-blue-400 border-blue-400 bg-slate-800/50' 
-          : 'text-slate-400 border-transparent hover:text-white hover:bg-slate-800/30'
-      }`}
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-    </button>
   );
 }

@@ -75,11 +75,6 @@ export default function TimeSpeedDistance() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Time / Speed / Distance</h3>
-        <p className="text-sm text-slate-400">Calculate any value given the other two</p>
-      </div>
-
       {/* Solve For Selection */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <label className="block text-sm font-medium text-slate-400 mb-3">Solve For</label>
@@ -87,7 +82,8 @@ export default function TimeSpeedDistance() {
           {(['time', 'speed', 'distance'] as SolveFor[]).map((option) => (
             <button
               key={option}
-              onClick={() => setSolveFor(option)}
+              aria-pressed={solveFor === option}
+            onClick={() => setSolveFor(option)}
               className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                 solveFor === option
                   ? 'bg-blue-600 text-white'
@@ -101,13 +97,14 @@ export default function TimeSpeedDistance() {
       </div>
 
       {/* Inputs */}
-      <div className="space-y-4">
+      <div className="av-tools-inputs space-y-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         {/* Distance Input */}
         {solveFor !== 'distance' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Distance</label>
+            <label htmlFor="av-tools-timespeeddistance-0" className="block text-sm font-medium text-slate-400 mb-2">Distance</label>
             <div className="flex gap-2">
-              <input
+              <input id="av-tools-timespeeddistance-0"
                 type="number"
                 value={distance}
                 onChange={(e) => setDistance(e.target.value)}
@@ -115,7 +112,7 @@ export default function TimeSpeedDistance() {
                 placeholder="0"
                 min="0"
               />
-              <select
+              <select aria-label="Distance unit"
                 value={distanceUnit}
                 onChange={(e) => setDistanceUnit(e.target.value as DistanceUnit)}
                 className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-3 text-white"
@@ -131,9 +128,9 @@ export default function TimeSpeedDistance() {
         {/* Speed Input */}
         {solveFor !== 'speed' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Speed</label>
+            <label htmlFor="av-tools-timespeeddistance-1" className="block text-sm font-medium text-slate-400 mb-2">Speed</label>
             <div className="flex gap-2">
-              <input
+              <input id="av-tools-timespeeddistance-1"
                 type="number"
                 value={speed}
                 onChange={(e) => setSpeed(e.target.value)}
@@ -141,7 +138,7 @@ export default function TimeSpeedDistance() {
                 placeholder="0"
                 min="0"
               />
-              <select
+              <select aria-label="Speed unit"
                 value={speedUnit}
                 onChange={(e) => setSpeedUnit(e.target.value as SpeedUnit)}
                 className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-3 text-white"
@@ -157,9 +154,9 @@ export default function TimeSpeedDistance() {
         {/* Time Input */}
         {solveFor !== 'time' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Time</label>
+            <label htmlFor="av-tools-timespeeddistance-2" className="block text-sm font-medium text-slate-400 mb-2">Time (hours and minutes)</label>
             <div className="flex gap-2 items-center">
-              <input
+              <input id="av-tools-timespeeddistance-2" aria-label="Time (hours)"
                 type="number"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
@@ -168,7 +165,7 @@ export default function TimeSpeedDistance() {
                 min="0"
               />
               <span className="text-slate-400">hrs</span>
-              <input
+              <input aria-label="Time (minutes)"
                 type="number"
                 value={minutes}
                 onChange={(e) => setMinutes(e.target.value)}
@@ -235,11 +232,13 @@ export default function TimeSpeedDistance() {
         </div>
       )}
 
-      {/* Formula Reference */}
-      <div className="text-center text-xs text-slate-500 border-t border-slate-700 pt-4">
+      <details className="av-tools-reference">
+        <summary>Formula reference</summary>
+        <div className="text-sm text-slate-400 space-y-1">
         <p>Distance = Speed × Time</p>
         <p>1 NM = 1.15 SM = 1.852 KM</p>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

@@ -106,16 +106,12 @@ export default function FuelCalculator() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Fuel Calculator</h3>
-        <p className="text-sm text-slate-400">Calculate endurance, required fuel, or range</p>
-      </div>
-
       {/* Mode Selection */}
       <div className="bg-slate-800/50 rounded-lg p-4">
         <label className="block text-sm font-medium text-slate-400 mb-3">Calculate</label>
         <div className="grid grid-cols-3 gap-2">
           <button
+            aria-pressed={mode === 'endurance'}
             onClick={() => setMode('endurance')}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               mode === 'endurance' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -124,14 +120,16 @@ export default function FuelCalculator() {
             Endurance
           </button>
           <button
+            aria-pressed={mode === 'required'}
             onClick={() => setMode('required')}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               mode === 'required' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
             }`}
           >
-            Fuel Req&apos;d
+            Fuel required
           </button>
           <button
+            aria-pressed={mode === 'range'}
             onClick={() => setMode('range')}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               mode === 'range' ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -147,6 +145,7 @@ export default function FuelCalculator() {
         {(['gal', 'lbs', 'liters'] as FuelUnit[]).map((unit) => (
           <button
             key={unit}
+            aria-pressed={fuelUnit === unit}
             onClick={() => setFuelUnit(unit)}
             className={`px-4 py-2 rounded-lg text-sm transition-colors ${
               fuelUnit === unit ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
@@ -158,11 +157,12 @@ export default function FuelCalculator() {
       </div>
 
       {/* Inputs */}
-      <div className="space-y-4">
+      <div className="av-tools-inputs space-y-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         {/* Fuel Onboard */}
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Fuel Onboard ({unitLabel})</label>
-          <input
+          <label htmlFor="av-tools-fuelcalculator-0" className="block text-sm font-medium text-slate-400 mb-2">Fuel Onboard ({unitLabel})</label>
+          <input id="av-tools-fuelcalculator-0"
             type="number"
             value={fuelOnboard}
             onChange={(e) => setFuelOnboard(e.target.value)}
@@ -174,8 +174,8 @@ export default function FuelCalculator() {
 
         {/* Fuel Burn Rate */}
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Fuel Burn Rate ({rateLabel})</label>
-          <input
+          <label htmlFor="av-tools-fuelcalculator-1" className="block text-sm font-medium text-slate-400 mb-2">Fuel Burn Rate ({rateLabel})</label>
+          <input id="av-tools-fuelcalculator-1"
             type="number"
             value={fuelBurnRate}
             onChange={(e) => setFuelBurnRate(e.target.value)}
@@ -189,8 +189,8 @@ export default function FuelCalculator() {
         {/* Mode-specific inputs */}
         {mode === 'required' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Trip Time (hours)</label>
-            <input
+            <label htmlFor="av-tools-fuelcalculator-2" className="block text-sm font-medium text-slate-400 mb-2">Trip Time (hours)</label>
+            <input id="av-tools-fuelcalculator-2"
               type="number"
               value={tripTime}
               onChange={(e) => setTripTime(e.target.value)}
@@ -205,8 +205,8 @@ export default function FuelCalculator() {
         {mode === 'range' && (
           <>
             <div className="bg-slate-800/50 rounded-lg p-4">
-              <label className="block text-sm font-medium text-slate-400 mb-2">Distance (nm)</label>
-              <input
+              <label htmlFor="av-tools-fuelcalculator-3" className="block text-sm font-medium text-slate-400 mb-2">Distance (nm)</label>
+              <input id="av-tools-fuelcalculator-3"
                 type="number"
                 value={tripDistance}
                 onChange={(e) => setTripDistance(e.target.value)}
@@ -216,8 +216,8 @@ export default function FuelCalculator() {
               />
             </div>
             <div className="bg-slate-800/50 rounded-lg p-4">
-              <label className="block text-sm font-medium text-slate-400 mb-2">Ground Speed (knots)</label>
-              <input
+              <label htmlFor="av-tools-fuelcalculator-4" className="block text-sm font-medium text-slate-400 mb-2">Ground Speed (knots)</label>
+              <input id="av-tools-fuelcalculator-4"
                 type="number"
                 value={groundSpeed}
                 onChange={(e) => setGroundSpeed(e.target.value)}
@@ -231,8 +231,8 @@ export default function FuelCalculator() {
 
         {mode === 'endurance' && (
           <div className="bg-slate-800/50 rounded-lg p-4">
-            <label className="block text-sm font-medium text-slate-400 mb-2">Ground Speed (for range, knots)</label>
-            <input
+            <label htmlFor="av-tools-fuelcalculator-5" className="block text-sm font-medium text-slate-400 mb-2">Ground Speed (for range, knots)</label>
+            <input id="av-tools-fuelcalculator-5"
               type="number"
               value={groundSpeed}
               onChange={(e) => setGroundSpeed(e.target.value)}
@@ -245,8 +245,8 @@ export default function FuelCalculator() {
 
         {/* Reserve */}
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Reserve (minutes)</label>
-          <input
+          <label htmlFor="av-tools-fuelcalculator-6" className="block text-sm font-medium text-slate-400 mb-2">Reserve (minutes)</label>
+          <input id="av-tools-fuelcalculator-6"
             type="number"
             value={reserveMinutes}
             onChange={(e) => setReserveMinutes(e.target.value)}
@@ -276,7 +276,7 @@ export default function FuelCalculator() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-green-400">{formatTime((result as { usableEndurance: number }).usableEndurance)}</p>
-                  <p className="text-slate-400 text-sm">Usable (w/ reserve)</p>
+                  <p className="text-slate-400 text-sm">Usable (reserve excluded)</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-center pt-2 border-t border-slate-700">

@@ -161,16 +161,12 @@ export default function WindCalculator() {
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h3 className="text-lg font-semibold text-white mb-2">Wind Calculator</h3>
-        <p className="text-sm text-slate-400">Calculate heading and ground speed with wind correction</p>
-      </div>
-
       {/* Inputs */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="av-tools-inputs grid grid-cols-2 gap-4">
+        <h3 className="av-tools-section-title">Inputs</h3>
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">True Course (°)</label>
-          <input
+          <label htmlFor="av-tools-windcalculator-0" className="block text-sm font-medium text-slate-400 mb-2">True Course (°)</label>
+          <input id="av-tools-windcalculator-0"
             type="number"
             value={trueCourse}
             onChange={(e) => setTrueCourse(e.target.value)}
@@ -182,8 +178,8 @@ export default function WindCalculator() {
         </div>
 
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">True Airspeed (kts)</label>
-          <input
+          <label htmlFor="av-tools-windcalculator-1" className="block text-sm font-medium text-slate-400 mb-2">True Airspeed (kts)</label>
+          <input id="av-tools-windcalculator-1"
             type="number"
             value={trueAirspeed}
             onChange={(e) => setTrueAirspeed(e.target.value)}
@@ -194,8 +190,8 @@ export default function WindCalculator() {
         </div>
 
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Wind From (°)</label>
-          <input
+          <label htmlFor="av-tools-windcalculator-2" className="block text-sm font-medium text-slate-400 mb-2">Wind From (°)</label>
+          <input id="av-tools-windcalculator-2"
             type="number"
             value={windDirection}
             onChange={(e) => setWindDirection(e.target.value)}
@@ -207,8 +203,8 @@ export default function WindCalculator() {
         </div>
 
         <div className="bg-slate-800/50 rounded-lg p-4">
-          <label className="block text-sm font-medium text-slate-400 mb-2">Wind Speed (kts)</label>
-          <input
+          <label htmlFor="av-tools-windcalculator-3" className="block text-sm font-medium text-slate-400 mb-2">Wind Speed (kts)</label>
+          <input id="av-tools-windcalculator-3"
             type="number"
             value={windSpeed}
             onChange={(e) => setWindSpeed(e.target.value)}
